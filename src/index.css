@@ -131,9 +131,9 @@ body {
 .brand-row { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
   width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px;
-  font-family: ui-monospace, monospace;
+  background: var(--panel-2);
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
   box-shadow: var(--shadow-soft);
 }
 .brand-title {

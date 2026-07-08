@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
 import rehypeKatex from 'rehype-katex'
+import Logo from './Logo'
 
 /* ------------------------------------------------------------------ */
 /*  Content: one JSON file per module in src/topics/, sorted by name   */
@@ -489,7 +490,9 @@ export default function App() {
       <aside className={'sidebar' + (navOpen ? ' open' : '')}>
         <div className="brand">
           <div className="brand-row">
-            <div className="brand-mark">{'{}'}</div>
+            <div className="brand-mark">
+              <Logo size={34} />
+            </div>
             <div>
               <div className="brand-title">DSA Interview Prep</div>
               <div className="brand-sub">Workbook · {TOPICS.length} modules · C++</div>
