@@ -1,0 +1,267 @@
+{
+  "tag": "m09",
+  "week": "Week 4 · Module 09",
+  "title": "Backtracking",
+  "priority": "moderate",
+  "summary": "Backtracking is DFS over a tree of *partial solutions*: build a candidate one choice at a time, and the instant it can't lead anywhere, **undo** the last choice and try the next. It powers every \"return all subsets / permutations / combinations\" question — a Flipkart-OA staple — and with three small templates you can cover 90% of them.",
+  "notes": [
+    {
+      "heading": "Recognizing a backtracking problem",
+      "body": "Before any code, learn the *smell*. A problem is asking for backtracking when:\n\n- It wants you to **enumerate or list all** valid configurations: \"return all subsets\", \"all permutations\", \"all combinations that sum to X\", \"all valid placements\".\n- The answer is a **sequence of choices**, where each step picks from a small menu: include/exclude an element, place a queen in one of $n$ columns, pick the next character.\n- Constraints are **tiny** — $n \\le 20$ for subsets/permutations, boards around $10 \\times 10$. Small $n$ is the setter whispering \"exponential search is intended\".\n- You must **count** or find *one* valid arrangement under combinatorial constraints, and there's no clean greedy or DP formula.\n\n> [!EXAM] Read the constraints first\n> $n \\le 20$? $2^{20} \\approx 10^6$ — a full include/exclude search fits comfortably in the time limit. $n \\le 10$ with \"all orderings\"? $10! \\approx 3.6\\text{M}$ — permutation search is fine. If instead $n \\le 10^5$, backtracking is the *wrong* answer; go look for DP, greedy, or two pointers.\n\n> [!KEY] Keyword tells\n> \"all possible\", \"generate\", \"every way\", \"return all combinations\", \"does a path exist\". Any of these plus a small $n$ ⇒ start sketching the choice tree.\n\n> [!INTUITION]\n> Backtracking is **brute force with a rewind button**. You will still visit an exponential number of candidates in the worst case — the wins come from *never revisiting* dead prefixes (the rewind) and from *pruning* branches you can prove are hopeless."
+    },
+    {
+      "heading": "The universal skeleton: make → recurse → undo",
+      "body": "Every backtracking solution is the same recursive function wearing different clothes. You keep one mutable **state** (usually a `vector<int>& cur` holding the choices so far), and `backtrack(state)` does exactly two things:\n\n1. Check a **base case** — if the partial candidate is a complete solution, record it.\n2. Loop over the **choices** available right now, and for each one: **make it → recurse → undo it**.\n\n[[fig:m09-make-recurse-undo]]\n\nThe *undo* step is the entire trick. After the recursive call returns, you restore the state to exactly what it was before the call, so the next iteration of the loop starts clean. That's what lets one shared `cur` vector safely represent every node of an exponential tree.\n\n> [!ANALOGY] A maze with breadcrumbs\n> You walk into a corridor (make a choice), explore everything reachable from it (recurse), and when it dead-ends you walk back to the junction and pick up your breadcrumb (undo) before trying the next corridor. You never teleport — you always retrace your last step. That's why every mutation needs a matching un-mutation.\n\n> [!KEY] Four things define any backtracking problem\n> **State** (what you've built so far), **choices** (what you can append next), **base case** (when to record an answer), **prune** (when to give up early). If you can name all four out loud, the code writes itself.\n\n> [!PITFALL] The #1 backtracking bug\n> A missing `pop_back()` (or `used[i] = false`, or board un-mark). One forgotten undo doesn't crash — it silently corrupts **every subsequent branch**, and the output is garbage in a way that's painful to debug under a timer. Write the make/undo pair *together*, then insert the recursive call between them."
+    },
+    {
+      "heading": "Templates 1 & 2: subsets and combinations",
+      "body": "**Template 1 — subsets (include/exclude).** For each element you make a binary decision: take it or skip it. The tree has depth $n$ and $2^n$ leaves, and every leaf is a valid subset.\n\n```cpp\n// ---------- TEMPLATE 1: SUBSETS (include/exclude, order doesn't matter) ----------\n// For each element you decide to take it or not. 2^n leaves.\nvoid subsets(int i, vector<int>& nums, vector<int>& cur, vector<vector<int>>& res) {\n    if (i == (int)nums.size()) {           // decided every element\n        res.push_back(cur);                // every node/leaf is a valid subset\n        return;\n    }\n    cur.push_back(nums[i]);                 // choice: take nums[i]\n    subsets(i + 1, nums, cur, res);\n    cur.pop_back();                         // UNDO\n    subsets(i + 1, nums, cur, res);         // choice: skip nums[i]\n}\n```\n\n[[fig:m09-subset-tree]]\n\n> [!EXAMPLE] Trace on `[1,2]`\n> take 1 → take 2 → record `[1,2]` → undo 2 → record `[1]` → undo 1 → skip 1 → take 2 → record `[2]` → undo 2 → record `[]`. Four leaves, four subsets, and `cur` is empty again when the function returns — proof the undos balanced.\n\n**Template 2 — combinations (the `start` index).** When order doesn't matter and you loop over choices, you must stop `[2,3]` and `[3,2]` from both appearing. The fix: pass a `start` index and only look **forward**. Each combination is then generated in exactly one (sorted-position) order.\n\n```cpp\n// ---------- TEMPLATE 2: COMBINATIONS / COMBINATION-SUM (start index avoids dups) ----------\n// Use a `start` index so you never reuse earlier elements -> combinations, not permutations.\nvoid combine(int start, vector<int>& nums, vector<int>& cur, vector<vector<int>>& res) {\n    res.push_back(cur);                     // record current combination (if every prefix is valid)\n    for (int i = start; i < (int)nums.size(); ++i) {\n        cur.push_back(nums[i]);             // choose nums[i]\n        combine(i + 1, nums, cur, res);     // i+1 => can't reuse; i => allow reuse (combination sum)\n        cur.pop_back();                     // UNDO\n    }\n}\n```\n\n[[fig:m09-start-index]]\n\n> [!KEY] The `i` / `i+1` / `used[]` dial\n> Recurse with `i + 1` → each element used at most once (Combinations, Subsets II). Recurse with `i` → the same element may be reused (Combination Sum). Loop from `0` with a `used[]` array → order matters (Permutations). This single decision is the difference between three whole problem families — mixing them up silently produces wrong-shaped output.\n\n> [!NOTE]\n> Template 2 records `cur` at **every** node, not just leaves — a subset/combination of any size is an answer. Contrast with permutations below, where only full-length leaves count. Deciding *where the base case records* is part of understanding the problem."
+    },
+    {
+      "heading": "Template 3: permutations",
+      "body": "When **order matters**, the `start` index is wrong — `[3,2]` genuinely differs from `[2,3]` and both must appear. So at every level you consider *all* elements, and use a `used[]` array to skip the ones already placed in the current prefix.\n\n```cpp\n// ---------- TEMPLATE 3: PERMUTATIONS (order matters, track used) ----------\nvoid permute(vector<int>& nums, vector<bool>& used,\n             vector<int>& cur, vector<vector<int>>& res) {\n    if (cur.size() == nums.size()) { res.push_back(cur); return; }\n    for (int i = 0; i < (int)nums.size(); ++i) {\n        if (used[i]) continue;              // pruning: skip already-placed elements\n        used[i] = true; cur.push_back(nums[i]);\n        permute(nums, used, cur, res);\n        cur.pop_back(); used[i] = false;    // UNDO both\n    }\n}\n```\n\nThe tree fans out $n$ ways at the root, $n-1$ at the next level, and so on: $n!$ leaves, and copying each answer costs $O(n)$, so the total is $O(n \\cdot n!)$.\n\n> [!PITFALL] Undo **both** mutations\n> You made two changes — `used[i] = true` *and* `cur.push_back(...)` — so you must undo two. Forgetting `used[i] = false` makes elements vanish from later branches; forgetting `pop_back()` makes `cur` grow past `nums.size()` and the base case never fires cleanly.\n\n> [!INTUITION] Subsets vs permutations in one sentence\n> Subsets ask **\"which elements?\"** (binary decision per element, $2^n$); permutations ask **\"which element next?\"** (shrinking menu per slot, $n!$). Pick the question the problem is really asking and the template follows."
+    },
+    {
+      "heading": "Handling duplicates: sort, then skip equal siblings",
+      "body": "Subsets II and Combination Sum II hand you an array **with duplicates** and demand no duplicate answers. The pattern: **sort first** so equal values sit next to each other, then inside the loop skip a value that equals its predecessor *at the same tree depth*:\n\n```cpp\nsort(nums.begin(), nums.end());\nfor (int i = start; i < n; ++i) {\n    if (i > start && nums[i] == nums[i-1]) continue; // skip dup siblings\n    ...\n}\n```\n\n[[fig:m09-dedup]]\n\nWhy it works: two loop iterations at the same call (same `start`, same depth) that pick equal values would spawn **identical subtrees** — same remaining choices, same value chosen. Exploring the first is enough; the guard kills the clones.\n\n> [!PITFALL] `i > start`, not `i > 0`\n> Comparing against `0` also blocks *parent-then-child* repeats — e.g. it would forbid `[2,2]` entirely, dropping valid answers. You only want to block *sibling* repeats: same value tried twice **in the same loop**. `i > start` says \"there was an earlier iteration of *this* loop\", which is exactly the sibling condition.\n\n> [!INTUITION]\n> Vertical repetition (a duplicate deeper in the tree, under a different parent choice) builds a **different** multiset prefix — keep it. Horizontal repetition (a duplicate tried again by the same loop) rebuilds the **same** subtree — skip it. The dedup guard is a horizontal filter only.\n\nPermutations II needs a subtler rule (`!used[i-1]`) because there's no `start` index — that one gets a full deep dive below."
+    },
+    {
+      "heading": "Pruning, pitfalls, and the interview script",
+      "body": "Backtracking without pruning is often TLE with extra steps. The habits that separate AC from timeout:\n\n- **Prune early, prune hard.** Sort candidates and `break` the moment a partial sum exceeds the target (everything after is larger too). Return immediately on an invalid cell. In Generate Parentheses, count opens/closes and never generate an invalid prefix at all — pruning *while building* beats generate-then-filter by an exponential factor.\n- **Pass big containers by reference.** State like `vector<int>& cur` or `string& path` must be `&`-references that you mutate-then-restore. Copying at every level multiplies an already-exponential runtime by another factor of $n$ (or worse).\n- **`res.push_back(cur)` copies — that's what you want.** The shared `cur` keeps changing; recording a *copy* freezes the answer. Never store pointers or iterators into `cur` — they'll dangle the moment you backtrack.\n- **Be explicit about where answers live.** Subsets: *every* node is an answer (record before the loop). Permutations / N-Queens: only *full-length* leaves count (record in the base case). Choosing wrong gives you a flood of partial junk or an empty result.\n\n> [!EXAM] Pruning is the AC/TLE line in timed OAs\n> Flipkart-style target-sum questions are written so the unpruned search times out. The sorted-candidates + `break` combo (see the Combination Sum deep dive) typically cuts the tree by orders of magnitude for a one-line cost. Make sorting your reflex whenever a sum or bound is involved.\n\n> [!KEY] The narration script\n> Say it out loud before coding: \"This is *enumerate-all* with small $n$, so backtracking. My **state** is `cur`, my **choices** at each step are ⟨X⟩, my **base case** is ⟨Y⟩, and I'll **prune** when ⟨Z⟩.\" Then write the make → recurse → undo skeleton first and fill in the choices. Naming the structure up front signals you *recognize the pattern* instead of groping for it — exactly what pattern-recognition OAs and interviewers reward.\n\n> [!WARNING]\n> Complexity answers to have ready: subsets $O(n \\cdot 2^n)$, permutations $O(n \\cdot n!)$, Combination Sum roughly $O(N^{T/M})$ nodes (target $T$, smallest candidate $M$), Word Search $O(m \\cdot n \\cdot 4^L)$. Recursion depth (= extra space) is the length of the longest partial candidate."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Subsets",
+      "url": "https://leetcode.com/problems/subsets/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The canonical include/exclude drill — solve it with Template 1, then again with Template 2's `start` loop."
+    },
+    {
+      "name": "Combinations",
+      "url": "https://leetcode.com/problems/combinations/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Pick k of n; pure `start`-index practice — record only when `cur.size() == k`."
+    },
+    {
+      "name": "Combination Sum",
+      "url": "https://leetcode.com/problems/combination-sum/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Reuse allowed: recurse with `i`, not `i+1`; sort + `break` when a candidate exceeds the remaining target."
+    },
+    {
+      "name": "Combination Sum II",
+      "url": "https://leetcode.com/problems/combination-sum-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Each number once (`i+1`) plus the `i > start` duplicate-sibling skip."
+    },
+    {
+      "name": "Permutations",
+      "url": "https://leetcode.com/problems/permutations/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Order matters: loop from 0 with a `used[]` array (Template 3), and undo *both* mutations."
+    },
+    {
+      "name": "Permutations II",
+      "url": "https://leetcode.com/problems/permutations-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Permutations with duplicates — the trickiest dedup rule: skip when `nums[i]==nums[i-1] && !used[i-1]`."
+    },
+    {
+      "name": "Subsets II",
+      "url": "https://leetcode.com/problems/subsets-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Subsets + sort-and-skip-dup: the `i > start` guard in its natural habitat."
+    },
+    {
+      "name": "Letter Combinations of a Phone Number",
+      "url": "https://leetcode.com/problems/letter-combinations-of-a-phone-number/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Branch per digit over its mapped letters — a clean multi-way choice tree, no dedup needed."
+    },
+    {
+      "name": "Generate Parentheses",
+      "url": "https://leetcode.com/problems/generate-parentheses/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Prune with open/close counts while building — never generate an invalid prefix, don't filter afterwards."
+    },
+    {
+      "name": "Palindrome Partitioning",
+      "url": "https://leetcode.com/problems/palindrome-partitioning/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "The choice is *where to cut next*: extend the current piece only while it's a palindrome."
+    },
+    {
+      "name": "Word Search",
+      "url": "https://leetcode.com/problems/word-search/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Grid DFS — mark the cell in place with `'#'`, recurse 4 ways, restore the char on the way out."
+    },
+    {
+      "name": "N-Queens",
+      "url": "https://leetcode.com/problems/n-queens/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "One queen per row; O(1) safety via three sets keyed by `col`, `row+col`, `row-col+n`."
+    },
+    {
+      "name": "Sudoku Solver",
+      "url": "https://leetcode.com/problems/sudoku-solver/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Constraint propagation on a 9×9 grid — try digits 1–9 per empty cell, undo on failure."
+    },
+    {
+      "name": "Word Search II",
+      "url": "https://leetcode.com/problems/word-search-ii/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Backtracking + Trie: walk the grid and the trie together so one DFS prunes many words at once."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Combination Sum** — given *distinct* candidates and a target, return all combinations that sum to the target, where each candidate may be used an unlimited number of times. (🎯 OA-critical.)",
+      "url": "https://leetcode.com/problems/combination-sum/",
+      "tag": "start-index",
+      "answer": "**Why the naive version fails.** If your loop starts from index 0 at every level, you'll generate `[2,3]` and `[3,2]` as *separate* results — you're enumerating permutations, not combinations, and the duplicate explosion buries you.\n\n> [!KEY] The start index enforces one canonical order\n> At each recursion level you may only pick candidates from index `i` **onward**. Every combination is then built in exactly one non-decreasing order of positions, so each *set* appears exactly once — no set-based dedup needed.\n\n[[fig:m09-start-index]]\n\n**The reuse trick.** To allow using a number again, recurse with the **same index `i`** (not `i+1`). Read it as: `i` = \"I may pick this one more time\"; `i+1` = \"I'm done with this candidate, move on.\" One character controls the entire reuse semantics.\n\n**The pruning that wins OAs.** Sort the candidates first. Then inside the loop, the moment `c[i] > target`, every later candidate is even larger — cut the whole tail with `break`, not `continue`.\n\n```cpp\nvoid dfs(int start, int target, vector<int>& c, vector<int>& cur, vector<vector<int>>& res) {\n    if (target == 0) { res.push_back(cur); return; }\n    for (int i = start; i < (int)c.size(); ++i) {\n        if (c[i] > target) break;      // PRUNE: sorted candidates -> the rest are larger too\n        cur.push_back(c[i]);\n        dfs(i, target - c[i], c, cur, res);  // `i` (not i+1) => reuse allowed\n        cur.pop_back();                       // UNDO\n    }\n}\n// caller: sort(c); dfs(0, target, c, cur, res);\n```\n\n**Complexity.** Worst case $O(N^{T/M})$ tree nodes, where $T$ = target and $M$ = smallest candidate — depth is bounded by $T/M$ (each pick removes at least $M$ from the target) and each node branches up to $N$ ways. Space is the $O(T/M)$ recursion depth.\n\n**What generalizes.** The `start`-index-plus-sorted-`break` combo is the skeleton for Combination Sum II/III, Subsets II, and every \"pick numbers to hit a bound\" OA question. Decide `i` vs `i+1` first; add the sorted `break` second; only then think about anything else."
+    },
+    {
+      "q": "**Permutations II** — return all *unique* permutations of an array that may contain duplicates, without generating repeats.",
+      "url": "https://leetcode.com/problems/permutations-ii/",
+      "tag": "dedup",
+      "answer": "**Why the naive version fails.** Generating all $n!$ permutations and dumping them into a `set` works — but it does exponentially more work than needed and interviewers explicitly want the pruning. The subtlety: with no `start` index, the `i > start` sibling-skip from subsets doesn't apply. You need a different signal for \"this choice would repeat a sibling\".\n\n> [!INTUITION] Read `used[i-1]` as \"where is my twin right now?\"\n> Sort so equal values are adjacent. About to place `nums[i]` where `nums[i] == nums[i-1]`: if `used[i-1]` is **false**, the identical twin was already tried *and backtracked* at this very depth — choosing `nums[i]` now would rebuild that exact branch. Skip it. If `used[i-1]` is **true**, the twin is part of the *current prefix* (a genuinely different position, one level up), so placing `nums[i]` here is new and legal.\n\n```cpp\nsort(nums.begin(), nums.end());\nvoid dfs(vector<int>& nums, vector<bool>& used, vector<int>& cur, vector<vector<int>>& res) {\n    if (cur.size() == nums.size()) { res.push_back(cur); return; }\n    for (int i = 0; i < (int)nums.size(); ++i) {\n        if (used[i]) continue;\n        if (i > 0 && nums[i] == nums[i-1] && !used[i-1]) continue; // key dedup line\n        used[i] = true; cur.push_back(nums[i]);\n        dfs(nums, used, cur, res);\n        cur.pop_back(); used[i] = false;\n    }\n}\n```\n\n**Walking the logic on `[1,1,2]`.** At the root, `i=0` places the first `1` and its subtree produces `[1,1,2]` and `[1,2,1]`. Back at the root, `i=1` sees `nums[1]==nums[0]` and `used[0]==false` (the first `1` was just undone) → skip, because its subtree would be a carbon copy. `i=2` places `2`, and inside that branch the two `1`s are placed in index order, giving `[2,1,1]`. Three unique permutations, zero wasted subtrees.\n\n**Why not the opposite condition (`used[i-1]`)?** Flipping it also dedups (it just canonicalizes the *reverse* order of twins) but prunes far later — the `!used[i-1]` version kills a duplicate branch at the shallowest possible node, which is where the exponential savings are.\n\n**Complexity.** $O(n \\cdot n!)$ worst case (all values distinct — it degrades gracefully to plain permutations); with many duplicates the pruned tree is dramatically smaller, approaching the true count $n!/(k_1!\\,k_2!\\cdots)$ of distinct permutations.\n\n**What generalizes.** Any \"enumerate orderings with repeated items\" task — string permutations, arranging tiles — uses exactly this sort + `!used[i-1]` guard."
+    },
+    {
+      "q": "**Word Search** — given an m×n grid of characters and a word, determine if the word can be traced through 4-directionally adjacent cells without reusing a cell.",
+      "url": "https://leetcode.com/problems/word-search/",
+      "tag": "grid-dfs",
+      "answer": "**Why the naive version fails.** A separate `visited[m][n]` boolean matrix *works*, but it costs $O(mn)$ extra memory and — worse under time pressure — it's easy to desync: forget one `visited[r][c] = false` on backtrack and the search silently misses valid paths.\n\n> [!KEY] The board is its own visited set\n> Overwrite the cell with a sentinel `'#'` before recursing, restore the original character after. The sentinel does **double duty**: it can never equal `w[k]`, so the mismatch check automatically stops you from stepping on your own path — no separate visited lookup at all — and restoring it lets sibling search paths reuse the cell.\n\n```cpp\nbool dfs(vector<vector<char>>& b, int r, int c, const string& w, int k) {\n    if (k == (int)w.size()) return true;                 // matched all chars\n    if (r < 0 || c < 0 || r >= (int)b.size() || c >= (int)b[0].size()) return false;\n    if (b[r][c] != w[k]) return false;                   // mismatch or already-visited sentinel\n\n    char tmp = b[r][c];\n    b[r][c] = '#';                                        // mark visited in place\n    bool found = dfs(b,r+1,c,w,k+1) || dfs(b,r-1,c,w,k+1)\n              || dfs(b,r,c+1,w,k+1) || dfs(b,r,c-1,w,k+1);\n    b[r][c] = tmp;                                        // UNDO — restore the char\n    return found;\n}\n```\n\nNotice the ordering discipline: check the **success** base case *before* the bounds check (the word can end exactly at an edge), and do bounds *before* touching `b[r][c]`. The short-circuit `||` chain also stops exploring the moment any direction succeeds — a free prune.\n\nOne more subtlety: `found` is captured *before* the restore, and the restore runs whether the branch succeeded or failed — the mutate/restore pair brackets the recursion unconditionally, which is exactly the make → recurse → undo shape from the notes, applied to a grid cell instead of a vector.\n\n**Complexity.** $O(m \\cdot n \\cdot 4^L)$ where $L$ = word length: each of the $mn$ start cells spawns a DFS that branches up to 4 ways per character (3 effectively, since you can't immediately go back). Space: $O(L)$ recursion depth — no visited matrix.\n\n**What generalizes.** Mutate-in-place-then-restore is *the* grid-backtracking idiom: Word Search II layers a Trie on top of this exact DFS, and Sudoku Solver applies the same place/undo bracket to digits instead of path cells."
+    },
+    {
+      "q": "**N-Queens** — place n queens on an n×n board so that no two attack each other (no shared row, column, or diagonal); return all arrangements / count them.",
+      "url": "https://leetcode.com/problems/n-queens/",
+      "tag": "constraint-sets",
+      "answer": "**Why the naive version fails.** For each candidate cell, scanning the column and both diagonals to check safety costs $O(n)$ per check and produces messy code. Two ideas turn this into a clean, fast search.\n\n**Idea 1 — one queen per row.** Since no two queens can share a row, recurse *by row*: `solve(row)` chooses a column for that row's queen. The row constraint is now satisfied by construction — you never even need to check it.\n\n**Idea 2 — diagonals are just index sums and differences.** Every cell on the same ↙ anti-diagonal shares the value `row + col`; every cell on the same ↘ diagonal shares `row - col` (add `n` to keep the index non-negative). So the entire attack check collapses to three boolean-array lookups.\n\n[[fig:m09-nqueens-diag]]\n\n> [!EXAMPLE] Check it on real cells\n> (2,3) and (4,1): `row+col` is 5 for both → same ↙ diagonal, they attack. (0,0) and (3,3): `row-col` is 0 for both → same ↘ diagonal, they attack. (1,2) and (2,0): sums 3 and 2, differences −1 and 2 → no shared line, safe.\n\n```cpp\nint n; vector<bool> col, diag1 /*row+col*/, diag2 /*row-col+n*/; int count = 0;\nvoid solve(int row) {\n    if (row == n) { ++count; return; }        // placed all rows\n    for (int c = 0; c < n; ++c) {\n        if (col[c] || diag1[row+c] || diag2[row-c+n]) continue;   // O(1) attack check\n        col[c] = diag1[row+c] = diag2[row-c+n] = true;            // place\n        solve(row + 1);\n        col[c] = diag1[row+c] = diag2[row-c+n] = false;           // UNDO\n    }\n}\n// sizes: col has n entries, diag1 and diag2 have 2n-1 (index range 0 .. 2n-2)\n```\n\nThe make → recurse → undo bracket now sets and clears **three** flags — same skeleton as always, just a richer state. For the \"return all boards\" variant, also keep a `vector<int> pos` of chosen columns and render it at the base case.\n\n**Complexity.** Roughly $O(n!)$ branches — row 0 has $n$ column options, and each placed queen prunes columns and diagonals for the rows below, shrinking the fan-out level by level. Space is $O(n)$ for the flag arrays and recursion depth.\n\n**What generalizes.** \"Encode each constraint as an O(1)-checkable index\" is the transferable skill: Sudoku uses the same move with row/column/box sets, and many placement OAs reduce to *pick a slot per level + constant-time conflict sets*. Internalize `row+col` and `row-col` — they come up verbatim."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "A problem says: *\"Given a string s (1 ≤ s.length ≤ 16), return **all** ways to split it into palindromic substrings.\"* Which approach fits, and what's the giveaway?",
+      "options": [
+        "DP over prefixes that *counts* the partitions — the palindrome structure demands a table",
+        "Backtracking over cut positions — \"return all\" plus a length cap of 16 signals an intended exponential enumeration",
+        "Greedy: always extend the longest palindrome from the current position",
+        "BFS over states (index, last cut) to find the shortest partition first"
+      ],
+      "answer": 1,
+      "explanation": "\"Return **all**\" means you must materialize every configuration — a counting DP can't list them, and greedy commits to one. Length ≤ 16 means up to $2^{15}$ cut patterns, which is exactly the exponential budget backtracking expects. If instead it asked for the *count* or the *minimum* cuts with length up to $10^5$, then DP would be the right call — constraints choose the tool.",
+      "tag": "pattern-recognition"
+    },
+    {
+      "q": "In Template 1 (subsets), you delete the `cur.pop_back()` line after the first recursive call. What actually happens?",
+      "options": [
+        "Compile error — `cur` is a reference and must be restored before reuse",
+        "Infinite recursion, since the base case is never reached",
+        "Later branches inherit leftover elements, so the output contains oversized, wrong subsets",
+        "Only the full set `nums` is returned once"
+      ],
+      "answer": 2,
+      "explanation": "Nothing crashes and recursion still terminates (`i` still increments toward `n`) — that's what makes this bug nasty. But `cur` never sheds elements it should have shed, so every \"skip\" branch after a \"take\" branch records a polluted vector. One missing undo silently corrupts *all subsequent* branches — the #1 backtracking bug. The compiler can't help you (C++ happily lets you not restore state), which kills option A.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "In the Combination Sum DFS, the recursive call is `dfs(i, target - c[i], ...)` — using `i` rather than `i + 1`. What does that change?",
+      "options": [
+        "The same candidate may be chosen again on the next level — reuse is allowed",
+        "It generates duplicate combinations like [2,3] and [3,2]",
+        "It always causes infinite recursion since `i` never advances",
+        "It skips every other candidate, halving the search"
+      ],
+      "answer": 0,
+      "explanation": "`i` means \"I may pick this candidate one more time\"; `i+1` means \"move on, never again.\" Duplicates like [2,3] vs [3,2] are prevented by the `start` mechanism itself (you only ever look forward), not by the `i`/`i+1` choice — so B is wrong. And recursion still terminates because `target` strictly decreases with every pick and the `c[i] > target` check (or `target == 0` base case) stops descent — so C is wrong too.",
+      "tag": "i-vs-i-plus-1"
+    },
+    {
+      "q": "What is the tight time complexity of generating all subsets of an n-element array, *including* the cost of copying each subset into the result?",
+      "options": [
+        "$O(2^n)$ — one unit per subset",
+        "$O(n!)$ — it's a full search tree",
+        "$O(n^2)$ — each element pairs with each other",
+        "$O(n \\cdot 2^n)$ — $2^n$ subsets, each costing up to $O(n)$ to copy"
+      ],
+      "answer": 3,
+      "explanation": "There are $2^n$ subsets and `res.push_back(cur)` copies a vector of length up to $n$, so the copying alone is $O(n \\cdot 2^n)$ — that factor of $n$ is the part people forget when they answer $O(2^n)$. $n!$ is permutations, a different tree shape entirely.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Run Template 1 (take-branch first, then skip-branch) on `nums = [1,2]`. In what order are subsets appended to `res`?",
+      "options": [
+        "[], [1], [2], [1,2]",
+        "[1,2], [1], [2], []",
+        "[1], [1,2], [2], []",
+        "[1,2], [2], [1], []"
+      ],
+      "answer": 1,
+      "explanation": "The take-branch recurses first, so the search dives all the way down the all-take path before any undo: take 1 → take 2 → record **[1,2]**; undo 2 → record **[1]**; undo 1, skip 1 → take 2 → record **[2]**; undo 2 → record **[]**. Option A is the order you'd get from Template 2 (record-then-loop) — knowing which template produces which order is a great self-check.",
+      "tag": "trace"
+    },
+    {
+      "q": "In Permutations II, the dedup guard is `if (i > 0 && nums[i] == nums[i-1] && !used[i-1]) continue;`. Why `!used[i-1]` rather than `used[i-1]`?",
+      "options": [
+        "An *unused* identical predecessor means it was already tried and undone at this same depth, so picking `nums[i]` would rebuild an identical sibling branch",
+        "It prevents reading `used[i-1]` out of bounds when i = 0",
+        "`used[i-1]` being true would mean the array wasn't sorted, so the guard re-checks sortedness",
+        "Either condition works identically; the choice is pure style"
+      ],
+      "answer": 0,
+      "explanation": "`!used[i-1]` = \"my twin is free at this level\" = it was explored and backtracked by an earlier iteration of *this same loop* — choosing `nums[i]` now clones that subtree, so skip. When `used[i-1]` is true, the twin sits in the *current prefix* (a different position), so placing `nums[i]` is genuinely new. B is handled by `i > 0`, not by the flag; and D is half-true in a trap-like way: flipping the condition still dedups, but it prunes much deeper in the tree, so the two are *not* identical in cost.",
+      "tag": "dedup-rule"
+    },
+    {
+      "q": "In N-Queens with diagonal sets, queens stand at (row 2, col 3) and (row 4, col 1). Do they attack each other?",
+      "options": [
+        "No — different rows, different columns means safe",
+        "Yes — same column after the `+n` shift",
+        "Yes — `row + col` is 5 for both, so they share a ↙ anti-diagonal",
+        "Yes — `row - col` is equal for both, so they share a ↘ diagonal"
+      ],
+      "answer": 2,
+      "explanation": "Compute both keys: sums are 2+3 = 5 and 4+1 = 5 — equal, so they sit on the same `row+col` anti-diagonal and attack. Differences are 2−3 = −1 and 4−1 = 3 — not equal, so D is wrong. A is the classic oversight: rows and columns clear does *not* mean safe; diagonals are exactly why the `row+col` / `row−col` encoding exists.",
+      "tag": "nqueens-math"
+    }
+  ],
+  "figures": {
+    "m09-make-recurse-undo": {
+      "caption": "The three-beat cycle inside every backtracking loop iteration: **make** the choice, **recurse**, **undo** the choice — then the loop moves to the next choice with the state exactly as it found it.",
+      "svg": "<svg viewBox=\"0 0 660 175\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Make, recurse, undo cycle of backtracking\"><text x=\"20\" y=\"24\" class=\"t-bold\">one loop iteration = make → recurse → undo</text><rect x=\"30\" y=\"58\" width=\"170\" height=\"54\" rx=\"8\" class=\"f-accent-soft s-accent\"/><text x=\"115\" y=\"80\" text-anchor=\"middle\" class=\"t-accent\">1. make choice</text><text x=\"115\" y=\"100\" text-anchor=\"middle\" class=\"t-sm t-mono\">cur.push_back(x)</text><line x1=\"202\" y1=\"85\" x2=\"240\" y2=\"85\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><rect x=\"246\" y=\"58\" width=\"170\" height=\"54\" rx=\"8\" class=\"f-panel s-line\"/><text x=\"331\" y=\"80\" text-anchor=\"middle\">2. recurse</text><text x=\"331\" y=\"100\" text-anchor=\"middle\" class=\"t-sm t-mono\">backtrack(...)</text><line x1=\"418\" y1=\"85\" x2=\"456\" y2=\"85\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><rect x=\"462\" y=\"58\" width=\"170\" height=\"54\" rx=\"8\" class=\"f-bad-soft s-bad\"/><text x=\"547\" y=\"80\" text-anchor=\"middle\" class=\"t-bad\">3. undo</text><text x=\"547\" y=\"100\" text-anchor=\"middle\" class=\"t-sm t-mono\">cur.pop_back()</text><path d=\"M 547 112 L 547 150 L 115 150 L 115 120\" class=\"s-muted f-none\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow)\"/><text x=\"331\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-muted\">next choice in the loop, state restored</text></svg>"
+    },
+    "m09-subset-tree": {
+      "caption": "The include/exclude tree for `[1,2]` (Template 1). Each level decides one element; the four leaves are exactly the four subsets, and `cur` is empty again after the whole traversal.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Include-exclude decision tree producing the subsets of one two\"><text x=\"20\" y=\"24\" class=\"t-bold\">subsets of [1,2] — every leaf is an answer</text><rect x=\"298\" y=\"50\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-panel s-line\"/><text x=\"330\" y=\"69\" text-anchor=\"middle\" class=\"t-mono\">[ ]</text><line x1=\"312\" y1=\"78\" x2=\"192\" y2=\"134\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"348\" y1=\"78\" x2=\"468\" y2=\"134\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><text x=\"238\" y=\"100\" text-anchor=\"end\" class=\"t-sm t-accent\">take 1</text><text x=\"422\" y=\"100\" text-anchor=\"start\" class=\"t-sm t-muted\">skip 1</text><rect x=\"148\" y=\"138\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-panel s-line\"/><text x=\"180\" y=\"157\" text-anchor=\"middle\" class=\"t-mono\">[1]</text><rect x=\"448\" y=\"138\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-panel s-line\"/><text x=\"480\" y=\"157\" text-anchor=\"middle\" class=\"t-mono\">[ ]</text><line x1=\"166\" y1=\"166\" x2=\"108\" y2=\"222\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"194\" y1=\"166\" x2=\"252\" y2=\"222\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"466\" y1=\"166\" x2=\"408\" y2=\"222\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"494\" y1=\"166\" x2=\"552\" y2=\"222\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><text x=\"122\" y=\"192\" text-anchor=\"end\" class=\"t-sm t-accent\">take 2</text><text x=\"240\" y=\"192\" text-anchor=\"start\" class=\"t-sm t-muted\">skip 2</text><text x=\"422\" y=\"192\" text-anchor=\"end\" class=\"t-sm t-accent\">take 2</text><text x=\"540\" y=\"192\" text-anchor=\"start\" class=\"t-sm t-muted\">skip 2</text><rect x=\"68\" y=\"226\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"100\" y=\"245\" text-anchor=\"middle\" class=\"t-mono t-ok\">[1,2]</text><rect x=\"228\" y=\"226\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"260\" y=\"245\" text-anchor=\"middle\" class=\"t-mono t-ok\">[1]</text><rect x=\"368\" y=\"226\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"400\" y=\"245\" text-anchor=\"middle\" class=\"t-mono t-ok\">[2]</text><rect x=\"528\" y=\"226\" width=\"64\" height=\"28\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"560\" y=\"245\" text-anchor=\"middle\" class=\"t-mono t-ok\">[ ]</text><text x=\"330\" y=\"286\" text-anchor=\"middle\" class=\"t-sm t-muted\">4 leaves = the 2² subsets, each recorded exactly once</text></svg>"
+    },
+    "m09-start-index": {
+      "caption": "The `start` index: the loop only considers candidates from `start` onward (highlighted), so every combination is built in one canonical order. Recursing with `i+1` forbids reuse; recursing with `i` allows it.",
+      "svg": "<svg viewBox=\"0 0 660 215\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Start index over a sorted candidate array with reuse rules\"><text x=\"20\" y=\"24\" class=\"t-bold\">the start index only looks forward</text><rect x=\"20\" y=\"50\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"42\" y=\"78\" text-anchor=\"middle\" class=\"t-mono t-muted\">2</text><rect x=\"66\" y=\"50\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"88\" y=\"78\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><rect x=\"112\" y=\"50\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"78\" text-anchor=\"middle\" class=\"t-mono t-accent\">6</text><rect x=\"158\" y=\"50\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"180\" y=\"78\" text-anchor=\"middle\" class=\"t-mono t-accent\">7</text><text x=\"42\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><line x1=\"88\" y1=\"162\" x2=\"88\" y2=\"126\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"88\" y=\"184\" text-anchor=\"middle\" class=\"t-sm t-accent\">start = 1</text><text x=\"250\" y=\"64\" class=\"t-sm t-muted\">index 0 is behind start — never revisited,</text><text x=\"250\" y=\"84\" class=\"t-sm t-muted\">so [2,3] and [3,2] can't both appear</text><text x=\"250\" y=\"128\" class=\"t-sm\"><tspan class=\"t-mono t-accent\">dfs(i+1)</tspan> — no reuse (Combinations)</text><text x=\"250\" y=\"156\" class=\"t-sm\"><tspan class=\"t-mono t-accent2\">dfs(i)</tspan> — reuse allowed (Combination Sum)</text><text x=\"250\" y=\"184\" class=\"t-sm\">loop from 0 + <tspan class=\"t-mono\">used[]</tspan> — order matters (Permutations)</text></svg>"
+    },
+    "m09-dedup": {
+      "caption": "Duplicate handling on sorted `[1,2,2]`: at the same depth and same `start`, the first `2` is explored, the second `2` is a duplicate *sibling* and gets skipped — its subtree would be identical.",
+      "svg": "<svg viewBox=\"0 0 660 205\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Sorted array with duplicate sibling skipped by the dedup guard\"><text x=\"20\" y=\"24\" class=\"t-bold\">sorted [1,2,2]: skip the duplicate sibling</text><rect x=\"20\" y=\"52\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"42\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-muted\">1</text><rect x=\"66\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"88\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">2</text><rect x=\"112\" y=\"52\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"134\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-bad\">2</text><text x=\"42\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"88\" y=\"146\" text-anchor=\"middle\" class=\"t-sm t-ok\">explored</text><text x=\"134\" y=\"172\" text-anchor=\"middle\" class=\"t-sm t-bad\">skipped</text><text x=\"250\" y=\"66\" class=\"t-sm\">i = 1: first 2 at this depth → explore</text><text x=\"250\" y=\"94\" class=\"t-sm\">i = 2: nums[2] == nums[1], i &gt; start → skip</text><text x=\"250\" y=\"128\" class=\"t-sm t-mono\">if (i &gt; start &amp;&amp; nums[i]==nums[i-1]) continue;</text><text x=\"250\" y=\"162\" class=\"t-sm t-muted\">same value + same start ⇒ identical subtree</text></svg>"
+    },
+    "m09-nqueens-diag": {
+      "caption": "Every square the queen **Q** attacks belongs to one of three constant-time indices: its column `c`, its ↙ anti-diagonal `row+col`, or its ↘ diagonal `row−col+n`. Safety = three boolean lookups.",
+      "svg": "<svg viewBox=\"0 0 660 285\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"N-Queens board showing column and diagonal constraint sets around one queen\"><text x=\"20\" y=\"24\" class=\"t-bold\">N-Queens: a queen's attacks as three indices</text><rect x=\"20\" y=\"50\" width=\"44\" height=\"44\" class=\"f-ok-soft s-line\"/><rect x=\"64\" y=\"50\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><rect x=\"108\" y=\"50\" width=\"44\" height=\"44\" class=\"f-bad-soft s-line\"/><rect x=\"152\" y=\"50\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"20\" y=\"94\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"64\" y=\"94\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\" stroke-width=\"2\"/><rect x=\"108\" y=\"94\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"152\" y=\"94\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"20\" y=\"138\" width=\"44\" height=\"44\" class=\"f-bad-soft s-line\"/><rect x=\"64\" y=\"138\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><rect x=\"108\" y=\"138\" width=\"44\" height=\"44\" class=\"f-ok-soft s-line\"/><rect x=\"152\" y=\"138\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"20\" y=\"182\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"64\" y=\"182\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><rect x=\"108\" y=\"182\" width=\"44\" height=\"44\" class=\"f-bg s-line\"/><rect x=\"152\" y=\"182\" width=\"44\" height=\"44\" class=\"f-ok-soft s-line\"/><text x=\"42\" y=\"78\" text-anchor=\"middle\" class=\"t-sm t-muted\">d2</text><text x=\"86\" y=\"78\" text-anchor=\"middle\" class=\"t-sm t-muted\">c</text><text x=\"130\" y=\"78\" text-anchor=\"middle\" class=\"t-sm t-muted\">d1</text><text x=\"86\" y=\"122\" text-anchor=\"middle\" class=\"t-bold t-accent\">Q</text><text x=\"42\" y=\"166\" text-anchor=\"middle\" class=\"t-sm t-muted\">d1</text><text x=\"86\" y=\"166\" text-anchor=\"middle\" class=\"t-sm t-muted\">c</text><text x=\"130\" y=\"166\" text-anchor=\"middle\" class=\"t-sm t-muted\">d2</text><text x=\"86\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">c</text><text x=\"174\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">d2</text><rect x=\"250\" y=\"55\" width=\"26\" height=\"26\" class=\"f-accent-soft s-line\"/><text x=\"263\" y=\"72\" text-anchor=\"middle\" class=\"t-sm t-muted\">c</text><text x=\"286\" y=\"72\" class=\"t-sm\"><tspan class=\"t-mono\">col[c]</tspan> — same column</text><rect x=\"250\" y=\"93\" width=\"26\" height=\"26\" class=\"f-bad-soft s-line\"/><text x=\"263\" y=\"110\" text-anchor=\"middle\" class=\"t-sm t-muted\">d1</text><text x=\"286\" y=\"110\" class=\"t-sm\"><tspan class=\"t-mono\">diag1[row+col]</tspan> — ↙ anti-diagonal</text><rect x=\"250\" y=\"131\" width=\"26\" height=\"26\" class=\"f-ok-soft s-line\"/><text x=\"263\" y=\"148\" text-anchor=\"middle\" class=\"t-sm t-muted\">d2</text><text x=\"286\" y=\"148\" class=\"t-sm\"><tspan class=\"t-mono\">diag2[row−col+n]</tspan> — ↘ diagonal</text><text x=\"250\" y=\"186\" class=\"t-sm t-muted\">Q at (1,1): col = 1, row+col = 2, row−col = 0</text><text x=\"20\" y=\"260\" class=\"t-sm t-muted\">safety check = three O(1) boolean lookups; one queen per row makes the row constraint free</text></svg>"
+    }
+  }
+}

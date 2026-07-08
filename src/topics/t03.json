@@ -1,0 +1,273 @@
+{
+  "tag": "m04",
+  "week": "Week 1 · Module 04",
+  "title": "Binary Search",
+  "priority": "attack",
+  "summary": "Binary search is two skills wearing one name: the sorted-array lookup you already know, and **binary-search-on-answer** — guess a candidate answer, check feasibility in $O(n)$, and let monotonicity discard half the guesses. The second one is the highest-leverage pattern in your OA prep: \"minimize the maximum\" problems at Codility and Flipkart are this template verbatim.",
+  "notes": [
+    {
+      "heading": "Bigger than \"find x in a sorted array\"",
+      "body": "You already know the classic version: sorted array, chop the range in half, $O(\\log n)$. In an OA that version is a warm-up at best. The version that actually wins you points is **binary search on a monotone predicate** — and it is the single pattern in this module you have never drilled, which is exactly why it is marked *attack*.\n\nForget arrays for a second. All binary search really needs is a yes/no question `feasible(x)` whose answers, laid out across the search space, look like `false false ... false true true ... true` (or the mirror image). One flip, and it never flips back. If you can (1) frame the problem as *finding that flip point* and (2) answer `feasible(x)` cheaply, you get a logarithmic algorithm — even when there is no sorted array anywhere in sight.\n\n[[fig:m04-monotone-boundary]]\n\n> [!KEY] Binary search needs monotonicity, not a sorted array\n> If `x` works, everything on one side of `x` must also work. A sorted array is just the special case where the predicate is `a[i] >= target`. Once you see it this way, \"binary search\" becomes a tool for *optimization* problems, not just lookup.\n\nReach for this module's tools when you see any of these signals:\n\n- The input is **sorted** or **rotated-sorted**, or you can define a monotonic predicate over it.\n- You are asked for the **min/max value satisfying a condition** — \"minimum capacity\", \"smallest divisor\", \"least time to finish\", \"maximum you can guarantee\".\n- The answer lives in a numeric range `[lo, hi]`, and a candidate `x` can be **checked in $O(n)$** even though computing the answer directly is expensive.\n- Brute force is $O(n^2)$ or $O(n \\cdot \\text{range})$ and TLEs, but the search space is monotone.\n\n> [!EXAM] The magic phrases\n> \"**Minimize the maximum** ...\" and \"**maximize the minimum** ...\" are near-certain binary-search-on-answer (parametric search). Codility and Flipkart both love this family — every 🎯 problem in this ladder is the *same template* with a different `feasible` function."
+    },
+    {
+      "heading": "Template 1 — exact match (the dialect you know)",
+      "body": "Every binary search maintains one invariant: **the answer (if it exists) is always inside the current range**. Each step tests the middle and discards the half that provably cannot contain the answer, so the range halves every iteration. Two details cause 90% of all binary-search bugs: the loop condition (`<` vs `<=`) and how you shrink the boundary. The fix is discipline, not cleverness: pick one style per job and drill it until it is muscle memory.\n\nHere is the exact-match dialect — inclusive bounds `[lo, hi]`, loop while `lo <= hi`:\n\n```cpp\n// ---------- 1. Classic: find exact target in sorted array ----------\n// Half-open reasoning with [lo, hi] inclusive. Returns index or -1.\nint binarySearch(const vector<int>& a, int target) {\n    int lo = 0, hi = (int)a.size() - 1;   // inclusive bounds\n    while (lo <= hi) {                     // <= because lo==hi is a valid cell\n        int mid = lo + (hi - lo) / 2;      // avoids int overflow vs (lo+hi)/2\n        if (a[mid] == target) return mid;\n        else if (a[mid] < target) lo = mid + 1;\n        else hi = mid - 1;\n    }\n    return -1;\n}\n```\n\nRead the three moves as *proofs*: if `a[mid] < target`, nothing at or left of `mid` can be the target, so `lo = mid + 1` is safe. Every update discards `mid` itself — that is what guarantees the range strictly shrinks and the loop terminates.\n\n> [!PITFALL] `(lo + hi) / 2` is a landmine\n> When `lo` and `hi` are both large, `lo + hi` overflows `int` and `mid` goes negative. Always write `mid = lo + (hi - lo) / 2`. It costs nothing and it is the first thing a Codility grader's edge cases will punish.\n\n> [!NOTE]\n> This inclusive/`<=` dialect is for **exact match** where you return from inside the loop. The next two templates use a different dialect. Do not mix the two inside one function — that hybrid is where infinite loops are born."
+    },
+    {
+      "heading": "Template 2 — lower_bound (learn this one cold)",
+      "body": "`lower_bound` answers: *what is the first index `i` with `a[i] >= target`?* This is the **boundary dialect**, and it is the one to learn cold, because binary-search-on-answer is the same code with the array swapped out for a predicate.\n\n```cpp\n// ---------- 2. lower_bound: first index with a[i] >= target ----------\n// Returns a.size() if no such element. This is the \"boundary\" style —\n// learn this one cold; upper_bound and most predicates are variants.\nint lowerBound(const vector<int>& a, int target) {\n    int lo = 0, hi = (int)a.size();        // note: hi = n (exclusive!)\n    while (lo < hi) {                      // < because hi is one-past-valid\n        int mid = lo + (hi - lo) / 2;\n        if (a[mid] < target) lo = mid + 1; // mid too small -> discard left half\n        else hi = mid;                     // mid is a candidate -> keep it\n    }\n    return lo;                             // lo == hi == first valid boundary\n}\n// upper_bound (first index with a[i] > target): change condition to a[mid] <= target.\n```\n\nNotice the deliberate asymmetry. When `a[mid]` is too small, `mid` can never be the boundary, so we jump past it: `lo = mid + 1`. When `a[mid]` qualifies, `mid` *might itself be the answer*, so we keep it in range: `hi = mid` (not `mid - 1`). The loop squeezes `lo` and `hi` together until they pinch the boundary, and `hi = n` starts \"one past the end\" so that \"no such element\" falls out naturally as the return value `n`.\n\n[[fig:m04-lower-bound]]\n\n> [!EXAMPLE] Trace: `a = [1, 3, 5, 5, 5, 8]`, target 5\n> `lo=0, hi=6` → `mid=3`, `a[3]=5 >= 5`, candidate → `hi=3`.\n> `lo=0, hi=3` → `mid=1`, `a[1]=3 < 5`, discard → `lo=2`.\n> `lo=2, hi=3` → `mid=2`, `a[2]=5 >= 5`, candidate → `hi=2`.\n> `lo == hi == 2`. First index with value ≥ 5 is **2**. Done in 3 steps.\n\n> [!KEY] The safe pair\n> In the `while (lo < hi)` dialect, `hi = mid` / `lo = mid + 1` is the safe update pair: one side always strictly moves, so the loop must terminate. Memorize the pair, not the derivation — under OA pressure you will not re-derive it."
+    },
+    {
+      "heading": "Template 3 — binary search on the answer (the money pattern)",
+      "body": "Now the pattern you have never practiced, and the one your target companies test hardest. In binary-search-on-answer you do not search *positions in an array* — you search **candidate answer values**, using a feasibility check as your comparator.\n\n> [!INTUITION] Turn optimization into guess-and-check\n> \"What is the minimum eating speed?\" is hard to compute directly. But \"**if** Koko eats at speed `k`, does she finish in `h` hours?\" is a trivial $O(n)$ loop. And it is monotone: if speed `k` works, every speed above `k` works too. So guess a speed, check it, and discard half the speeds — binary search over the answers themselves.\n\n[[fig:m04-koko-speeds]]\n\n```cpp\n// ---------- 3. Binary search on answer (THE money pattern) ----------\n// Find the smallest x in [lo, hi] such that feasible(x) is true,\n// given feasible() is monotonic: false...false,true...true.\nbool feasible(long long x /*, params */) {\n    // O(n) check: can we achieve the goal with candidate value x?\n    return true;\n}\nlong long minFeasible(long long lo, long long hi) {\n    while (lo < hi) {\n        long long mid = lo + (hi - lo) / 2;\n        if (feasible(mid)) hi = mid;       // mid works -> answer could be mid or smaller\n        else lo = mid + 1;                 // mid fails -> need bigger\n    }\n    return lo;                             // smallest feasible value\n}\n// For \"largest x that is feasible\" (true...true,false...false), flip:\n//   if (feasible(mid)) lo = mid; else hi = mid - 1;  with mid = lo + (hi - lo + 1)/2;\n//   (the +1 in mid biases UP to avoid an infinite loop when lo == hi-1)\n```\n\nCompare it to `lowerBound` above: it is the *identical* skeleton. `a[mid] < target` became `!feasible(mid)`. That is the whole trick.\n\nRun this four-question checklist on every candidate problem:\n\n1. **What am I searching over?** The answer *value* (a speed, a capacity, a number of days) — not an index.\n2. **What are `lo` and `hi`?** The theoretical min and max the answer could possibly take.\n3. **Is `feasible` monotonic, and in which direction?** `false → true` means \"find smallest\"; `true → false` means \"find largest\" (use the flipped update with the biased mid).\n4. **Write `feasible` first.** Test it by hand on the examples, *then* wrap the search around it.\n\n> [!EXAM] Debug the predicate, not the search\n> Before submitting, evaluate `feasible(lo)`, `feasible(hi)`, and one mid value by hand against the sample cases. The binary-search wrapper is 6 lines and never wrong once memorized — a wrong `feasible` is what makes a \"perfect\" search return garbage, and it is much faster to catch standalone."
+    },
+    {
+      "heading": "When sortedness breaks: rotated arrays",
+      "body": "Rotated sorted arrays (`[4,5,6,7,0,1,2]`) look like they kill binary search: the global \"sorted\" invariant is gone, so `a[mid] < target ⇒ go right` is simply wrong. The rescue is a *local* invariant that survives rotation: **at any `mid`, at least one of the two halves `[lo..mid]` and `[mid..hi]` is fully sorted**, because the rotation point lives in only one of them.\n\n[[fig:m04-rotated-halves]]\n\nOne comparison — `a[lo] <= a[mid]` — tells you which half is the sorted one. In a sorted half, a plain range check `a[lo] <= target && target < a[mid]` decides whether the target *can* live there. So each step you identify the sorted half, do the range check, and discard the half you can prove is target-free. Same halving, same $O(\\log n)$, just a smarter branch. The full code is in the deep dive below — try the problem first.\n\n> [!KEY] The transferable lesson\n> When a global invariant breaks, hunt for a local one you can branch on. \"One half is always sorted\" is to rotated arrays what \"the boundary is monotone\" is to on-answer problems.\n\n> [!WARNING] Duplicates change the game\n> With duplicates (LC 81, *Search in Rotated Sorted Array II*), `a[lo] == a[mid] == a[hi]` makes the sorted-half test ambiguous — you must shrink with `lo++` and the worst case degrades to $O(n)$. Say this out loud if an interviewer asks the follow-up; it is a known trap, not a trick."
+    },
+    {
+      "heading": "Pitfalls that eat OA points",
+      "body": "Binary search is short enough that graders expect it flawless. These are the exact failure modes to sweep for before you hit submit:\n\n- **Overflow:** `mid = lo + (hi - lo) / 2`, always. In on-answer problems make `lo`, `hi`, and any running sums `long long` — a sum of 32-bit ints overflows fast (Split Array's `hi = sum(nums)` is the classic case).\n- **`<` vs `<=`:** exact match = inclusive `hi = n - 1` with `while (lo <= hi)`. Boundary / on-answer = exclusive `hi = n` (or the value upper bound) with `while (lo < hi)`. Two dialects, never mixed in one function.\n- **Bounds sanity:** for on-answer, check that the true answer really lies in `[lo, hi]`. In Split Array, `lo = max(nums)` — starting at 0 still works but wastes iterations; starting *too high* silently skips the answer.\n- **Predicate first:** a wrong `feasible` is invisible inside a correct search. Test it alone (see the OA tip above).\n\n> [!PITFALL] The infinite-loop trap\n> In the `lo < hi` style, `hi = mid` + `lo = mid + 1` is the safe pair. The moment you write `if (feasible) lo = mid;` (the \"find largest\" flip), you MUST bias the midpoint up: `mid = lo + (hi - lo + 1) / 2`. Otherwise, when `hi - lo == 1`, `mid` computes to `lo`, feasible sets `lo = mid = lo`, and nothing ever changes. This single off-by-one is the most common binary-search TLE in existence.\n\n> [!EXAM] The 15-second narration that scores points\n> Say it in this order: \"The answer is monotone — if X works, X+1 works — so I'll binary search the answer. My feasibility check is [this greedy], $O(n)$. Bounds are [lo, hi]. Total $O(n \\log \\text{range})$.\" That sentence signals instant pattern recognition, which is exactly what interviewers and OA graders reward."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Binary Search",
+      "url": "https://leetcode.com/problems/binary-search/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "The canonical exact-match template — write it bug-free from memory before anything else."
+    },
+    {
+      "name": "Search Insert Position",
+      "url": "https://leetcode.com/problems/search-insert-position/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Literally `lower_bound`; cements the boundary style."
+    },
+    {
+      "name": "First Bad Version",
+      "url": "https://leetcode.com/problems/first-bad-version/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "First `true` in false...true — the predicate mindset with minimal code."
+    },
+    {
+      "name": "Sqrt(x)",
+      "url": "https://leetcode.com/problems/sqrtx/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Binary search on the answer value; watch for overflow in `mid*mid` — go `long long`."
+    },
+    {
+      "name": "Find First and Last Position of Element in Sorted Array",
+      "url": "https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "`lower_bound` + `upper_bound` combined — two boundary searches, zero linear scans."
+    },
+    {
+      "name": "Search in Rotated Sorted Array",
+      "url": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Decide which half is sorted, range-check it, discard the other — see the deep dive."
+    },
+    {
+      "name": "Find Minimum in Rotated Sorted Array",
+      "url": "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Find the pivot with a monotone comparison of `a[mid]` against `a[hi]`."
+    },
+    {
+      "name": "Koko Eating Bananas",
+      "url": "https://leetcode.com/problems/koko-eating-bananas/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The cleanest intro to search-on-answer: smallest speed whose total hours fit in `h`."
+    },
+    {
+      "name": "Capacity To Ship Packages Within D Days",
+      "url": "https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Minimize the max daily load — near-identical to Koko with a greedy day counter."
+    },
+    {
+      "name": "Split Array Largest Sum",
+      "url": "https://leetcode.com/problems/split-array-largest-sum/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "\"Minimize the maximum subarray sum\" — the archetype OA problem; full walkthrough in the deep dive."
+    },
+    {
+      "name": "Minimum Number of Days to Make m Bouquets",
+      "url": "https://leetcode.com/problems/minimum-number-of-days-to-make-m-bouquets/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Binary search on days; feasibility is a greedy scan counting adjacent bloomed flowers."
+    },
+    {
+      "name": "Find the Smallest Divisor Given a Threshold",
+      "url": "https://leetcode.com/problems/find-the-smallest-divisor-given-a-threshold/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Monotone sum-of-ceilings predicate — bigger divisor, smaller sum."
+    },
+    {
+      "name": "Median of Two Sorted Arrays",
+      "url": "https://leetcode.com/problems/median-of-two-sorted-arrays/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Partition-based binary search on the smaller array — see the deep dive."
+    },
+    {
+      "name": "Kth Smallest Element in a Sorted Matrix",
+      "url": "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Binary search on the *value* range; predicate = count of elements ≤ mid via a staircase walk."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Split Array Largest Sum** — split `nums` into `k` contiguous subarrays so that the largest subarray sum is as small as possible; return that minimum possible largest sum.",
+      "url": "https://leetcode.com/problems/split-array-largest-sum/",
+      "tag": "on-answer",
+      "answer": "**Why the naive approach fails.** The obvious move is DP over `(index, splits)` — $O(n^2 \\cdot k)$. It is correct, but it is slow, fiddly to index under time pressure, and it completely hides the elegant structure. In a 90-minute Flipkart set you do not have time for fiddly.\n\n> [!INTUITION] Flip the question\n> Instead of \"what is the best split?\", ask: \"**given a cap `X`, can I split into ≤ k pieces where every piece's sum is ≤ X?**\" That check is a trivial greedy: walk left to right, keep adding into the current piece; the moment adding would exceed `X`, cut and start a new piece. Count the pieces.\n\n**Why it is monotonic.** If cap `X` is achievable with ≤ k pieces, any larger cap `X' > X` is also achievable — bigger buckets can only mean fewer or equal cuts. So feasibility over increasing `X` reads `false, false, ..., true, true` — exactly the boundary picture, and the answer is the smallest feasible `X`.\n\n[[fig:m04-monotone-boundary]]\n\n**Bounds.** `lo = max(nums)` — whatever piece contains the largest element has at least that sum, so no smaller cap can ever be feasible. `hi = sum(nums)` — one piece holding everything is always feasible.\n\n```cpp\nint splitArray(vector<int>& nums, int k) {\n    long long lo = 0, hi = 0;\n    for (int x : nums) { lo = max(lo, (long long)x); hi += x; }\n    auto pieces = [&](long long cap) {          // greedy feasibility\n        long long cur = 0; int cnt = 1;\n        for (int x : nums) {\n            if (cur + x > cap) { cnt++; cur = x; } // start a new piece\n            else cur += x;\n        }\n        return cnt;\n    };\n    while (lo < hi) {\n        long long mid = lo + (hi - lo) / 2;\n        if (pieces(mid) <= k) hi = mid;          // feasible -> try smaller cap\n        else lo = mid + 1;                       // too many pieces -> raise cap\n    }\n    return (int)lo;\n}\n```\n\n**Complexity.** $O(n \\log(\\text{sum}))$ — the log factor is over the *value range*, not over $n$. That is exactly why on-answer beats the DP here.\n\n**What generalizes.** Koko, Ship Packages, Smallest Divisor, and Bouquets are all this *same code* with a different `feasible` lambda. Recognize the family — \"minimize the maximum\" / \"smallest value passing a greedy check\" — and you solve four OA problems with one memorized template."
+    },
+    {
+      "q": "**Search in Rotated Sorted Array** — a sorted array of distinct values was rotated at an unknown pivot; find the index of `target` in $O(\\log n)$, or return -1.",
+      "url": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
+      "tag": "local-invariant",
+      "answer": "**Why naive binary search fails.** The array is not globally sorted, so the classic inference `a[mid] < target ⇒ go right` is simply wrong — the target could be hiding on either side of the rotation point. But the structure is not gone, just bent.\n\n> [!KEY] The hidden local invariant\n> At any `mid`, **at least one of the halves `[lo..mid]` and `[mid..hi]` is fully sorted**, because the rotation pivot lives in exactly one of them. One comparison — `a[lo] <= a[mid]` — tells you which.\n\n[[fig:m04-rotated-halves]]\n\n**The algorithm.** If the left half is sorted, a plain range check `a[lo] <= target && target < a[mid]` decides whether the target can live there: if yes, go left; if no, it *must* be in the right half (or nowhere). If instead the right half is the sorted one, mirror the logic with `a[mid] < target && target <= a[hi]`. You only ever discard a half you can **prove** is target-free, so correctness holds and the range still halves every step.\n\n```cpp\nint search(vector<int>& a, int target) {\n    int lo = 0, hi = (int)a.size() - 1;\n    while (lo <= hi) {\n        int mid = lo + (hi - lo) / 2;\n        if (a[mid] == target) return mid;\n        if (a[lo] <= a[mid]) {                       // left half sorted\n            if (a[lo] <= target && target < a[mid]) hi = mid - 1;\n            else lo = mid + 1;\n        } else {                                     // right half sorted\n            if (a[mid] < target && target <= a[hi]) lo = mid + 1;\n            else hi = mid - 1;\n        }\n    }\n    return -1;\n}\n```\n\n**Complexity.** $O(\\log n)$ time, $O(1)$ space.\n\n**What generalizes.** When a global invariant is broken, find a *local* invariant and branch on it. (Follow-up trap to know: with duplicates — LC 81 — the test `a[lo] <= a[mid]` becomes ambiguous when `a[lo] == a[mid] == a[hi]`; you shrink with `lo++` and the worst case degrades to $O(n)$.)"
+    },
+    {
+      "q": "**Median of Two Sorted Arrays** — given two sorted arrays of sizes `m` and `n`, return the median of their combined sorted order in $O(\\log(\\min(m,n)))$.",
+      "url": "https://leetcode.com/problems/median-of-two-sorted-arrays/",
+      "tag": "partition-search",
+      "answer": "**Why naive fails.** Merging the arrays is $O(m+n)$ — correct, but the problem demands logarithmic time, which means you cannot afford to touch every element. You must binary search a *structural choice* instead of scanning.\n\n> [!INTUITION] Search for the partition, not a value\n> The median splits the combined `m + n` elements into a left half and a right half of (nearly) equal size. So choose how many elements `i` come from A's left part — then B must contribute `j = (m + n + 1) / 2 − i` automatically. There is only one number to search: `i`.\n\n**When is a partition correct?** Exactly when every left element ≤ every right element. Since A and B are each sorted internally, that global condition collapses to just **two cross-checks**: `A[i-1] <= B[j]` and `B[j-1] <= A[i]`. If `A[i-1] > B[j]`, A is contributing too much — take fewer from A (`hi = i - 1`). Otherwise take more (`lo = i + 1`). That is a monotone decision, so binary search on `i` works. Use `INT_MIN` / `INT_MAX` sentinels when a cut sits at an array's edge, and always search over the **smaller** array so `j` never goes out of range.\n\n[[fig:m04-median-partition]]\n\n```cpp\ndouble findMedianSortedArrays(vector<int>& A, vector<int>& B) {\n    if (A.size() > B.size()) swap(A, B);             // search the smaller one\n    int m = A.size(), n = B.size(), half = (m + n + 1) / 2;\n    int lo = 0, hi = m;\n    while (lo <= hi) {\n        int i = lo + (hi - lo) / 2, j = half - i;\n        int Al = (i == 0 ? INT_MIN : A[i-1]);        // sentinels handle edges\n        int Ar = (i == m ? INT_MAX : A[i]);\n        int Bl = (j == 0 ? INT_MIN : B[j-1]);\n        int Br = (j == n ? INT_MAX : B[j]);\n        if (Al <= Br && Bl <= Ar) {                  // correct partition\n            if ((m + n) % 2) return max(Al, Bl);\n            return (max(Al, Bl) + min(Ar, Br)) / 2.0;\n        } else if (Al > Br) hi = i - 1;              // A's left too big -> take fewer from A\n        else lo = i + 1;                             // take more from A\n    }\n    return 0.0;\n}\n```\n\n**Complexity.** $O(\\log(\\min(m, n)))$ time, $O(1)$ space.\n\n**What generalizes.** You have now seen binary search over an index, over an answer *value*, and here over a *decision* (where to cut). Whenever a choice can be validated by a couple of boundary inequalities and mis-validation tells you which direction to move, it is binary-searchable."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: \"Ship packages in the given order within `D` days, minimizing the maximum weight carried on any single day.\" Which approach fits best?",
+      "options": [
+        "Sliding window over the weights",
+        "DP over (package index, days used) — it is the only correct approach",
+        "Binary search on the daily capacity, with a greedy feasibility check that counts days",
+        "Sort the packages descending and assign with two pointers"
+      ],
+      "answer": 2,
+      "explanation": "\"Minimize the maximum\" + a cheap monotone check (\"does capacity X fit in ≤ D days?\") is textbook binary-search-on-answer: $O(n \\log \\text{sum})$. The DP (option B) is *correct* but slower and fiddlier — it is not the *only* correct approach. Sorting (option D) is illegal because packages must ship in order, and a sliding window doesn't optimize a capacity at all.",
+      "tag": "pattern"
+    },
+    {
+      "q": "Inside `while (lo < hi)` with `mid = lo + (hi - lo) / 2`, you write `if (feasible(mid)) hi = mid; else lo = mid;`. What happens?",
+      "options": [
+        "It works — both branches shrink the range",
+        "Infinite loop when `hi - lo == 1` and `mid` is infeasible",
+        "It returns the answer minus one",
+        "It fails only when the array has an even number of elements"
+      ],
+      "answer": 1,
+      "explanation": "When `hi - lo == 1`, `mid` computes to `lo`. If `feasible(mid)` is false, `lo = mid` assigns `lo` to itself — the range never shrinks and the loop spins forever. The safe pair in this dialect is `hi = mid` with `lo = mid + 1`; if you genuinely need `lo = mid` (find-largest version), you must bias the midpoint up: `mid = lo + (hi - lo + 1) / 2`.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "Koko-style search-on-answer: `n` piles, largest pile `M`, and each feasibility check scans all piles once. Total time complexity?",
+      "options": [
+        "$O(n \\log n)$",
+        "$O(\\log M)$",
+        "$O(n \\cdot M)$",
+        "$O(n \\log M)$"
+      ],
+      "answer": 3,
+      "explanation": "The binary search runs over the *value range* `[1, M]`, taking $O(\\log M)$ iterations, and each iteration pays an $O(n)$ feasibility scan — $O(n \\log M)$ total. $O(n \\log n)$ confuses the value range with the array size; $O(n \\cdot M)$ is the brute force that trying every speed would cost.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Using the boundary template, what does `lowerBound(a, 5)` return for `a = [1, 3, 5, 5, 5, 8]`?",
+      "options": [
+        "2",
+        "4",
+        "1",
+        "6"
+      ],
+      "answer": 0,
+      "explanation": "`lower_bound` returns the *first* index with `a[i] >= 5`. The run of 5s starts at index 2, so the answer is 2. Index 4 is the *last* 5 (that boundary is `upper_bound - 1`), index 1 holds 3 (< 5), and 6 = `n` would mean no element ≥ 5 exists.",
+      "tag": "trace"
+    },
+    {
+      "q": "Why write `mid = lo + (hi - lo) / 2` instead of `mid = (lo + hi) / 2`?",
+      "options": [
+        "It is faster on modern CPUs",
+        "It rounds toward `hi` instead of `lo`",
+        "It is required for the `while (lo < hi)` dialect to terminate",
+        "It avoids signed integer overflow when `lo + hi` exceeds `INT_MAX`"
+      ],
+      "answer": 3,
+      "explanation": "Both formulas compute the same value mathematically, but `lo + hi` can overflow a 32-bit int when both are large (huge arrays, or on-answer bounds like `sum(nums)`), producing a negative `mid` and undefined behavior. `lo + (hi - lo) / 2` never exceeds `hi`. It has nothing to do with rounding direction or termination.",
+      "tag": "pitfall"
+    },
+    {
+      "q": "In rotated-array search (no duplicates), the check `a[lo] <= a[mid]` succeeding guarantees exactly what?",
+      "options": [
+        "The target lies in the left half",
+        "The subarray `[lo..mid]` is fully sorted",
+        "The subarray `[mid..hi]` contains the rotation pivot... and the target",
+        "`mid` is the rotation pivot"
+      ],
+      "answer": 1,
+      "explanation": "The rotation pivot lives in exactly one half, and `a[lo] <= a[mid]` proves it is not in `[lo..mid]` — so that half is fully sorted. It says *nothing* about where the target is; you still need the range check `a[lo] <= target && target < a[mid]` to decide which half to keep. The pivot being in the right half doesn't mean the target is (option C).",
+      "tag": "invariant"
+    },
+    {
+      "q": "In Split Array Largest Sum, why is `lo = max(nums)` the correct lower bound for the search?",
+      "options": [
+        "Some piece must contain the largest element, so no cap below `max(nums)` is ever feasible",
+        "It guarantees the greedy produces exactly `k` pieces",
+        "Without it, the sum overflows 32-bit int",
+        "It is what makes `feasible` monotonic"
+      ],
+      "answer": 0,
+      "explanation": "Whatever split you choose, the piece holding the largest element has sum ≥ `max(nums)`, so any cap below that is infeasible — the answer can't be lower. Starting lower (0 or 1) still returns the right answer, just with wasted iterations; monotonicity comes from the greedy's structure, not the bound; and overflow is handled by `long long`, not by `lo`.",
+      "tag": "bounds"
+    },
+    {
+      "q": "You need the LARGEST `x` with `feasible(x)` true (pattern `true...true, false...false`), so you write `if (feasible(mid)) lo = mid; else hi = mid - 1;`. Which midpoint must you use?",
+      "options": [
+        "`mid = lo + (hi - lo) / 2` — the standard one",
+        "`mid = hi - (hi - lo) / 2` — bias toward hi is automatic",
+        "`mid = lo + (hi - lo + 1) / 2` — biased up, or the loop hangs when `hi - lo == 1`",
+        "Any of them — the branch logic alone guarantees progress"
+      ],
+      "answer": 2,
+      "explanation": "With `lo = mid` in play, the standard down-biased mid equals `lo` when `hi - lo == 1`; if `feasible(lo)` is true you assign `lo = lo` forever. The `+1` biases `mid` up to `hi` in that state, so either `lo` jumps to `hi` or `hi` drops below — progress either way. Option B is the same value as option A in disguise for this case, and option D is exactly the classic infinite-loop bug.",
+      "tag": "template-bug"
+    }
+  ],
+  "figures": {
+    "m04-monotone-boundary": {
+      "caption": "The shape every binary search exploits: `feasible(x)` is **false** for a while, then **true** forever. Binary search finds the flip point — the smallest feasible value — in $O(\\log)$ probes.",
+      "svg": "<svg viewBox=\"0 0 660 212\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Monotone predicate: a run of false then a run of true, with the answer at the first true\"><text x=\"20\" y=\"24\" class=\"t-bold\">feasible(x) across the answer space</text><rect x=\"20\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"42\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad\">F</text><text x=\"42\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><rect x=\"66\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"88\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad\">F</text><text x=\"88\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><rect x=\"112\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"134\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad\">F</text><text x=\"134\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><rect x=\"158\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"180\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad\">F</text><text x=\"180\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><rect x=\"204\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"226\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad\">F</text><text x=\"226\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"250\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"272\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"272\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><rect x=\"296\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"318\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"318\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">7</text><rect x=\"342\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"364\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"364\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">8</text><rect x=\"388\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"410\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"410\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">9</text><rect x=\"434\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"456\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"456\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">10</text><rect x=\"480\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"502\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"502\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">11</text><rect x=\"526\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"548\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">T</text><text x=\"548\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">12</text><line x1=\"272\" y1=\"172\" x2=\"272\" y2=\"130\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"134\" y=\"194\" text-anchor=\"middle\" class=\"t-sm t-bad\">all fail</text><text x=\"272\" y=\"194\" text-anchor=\"middle\" class=\"t-sm t-accent\">smallest feasible = the answer</text><text x=\"480\" y=\"194\" text-anchor=\"middle\" class=\"t-sm t-ok\">all work</text></svg>"
+    },
+    "m04-lower-bound": {
+      "caption": "`lower_bound` on `[1,3,5,5,5,8,10,12]` for target 5: the search pinches down onto index 2, the **first** cell with value ≥ 5. Note `hi` starts at the dashed ghost cell `n` — one past the end — so \"not found\" naturally returns `n`.",
+      "svg": "<svg viewBox=\"0 0 660 224\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"lower_bound on a sorted array: arrow marks the first index with value at least 5, ghost cell marks hi = n\"><text x=\"20\" y=\"24\" class=\"t-bold\">lower_bound: first index with a[i] ≥ 5</text><rect x=\"20\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><text x=\"42\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><rect x=\"66\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">3</text><text x=\"88\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><rect x=\"112\" y=\"56\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-accent\">5</text><text x=\"134\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><rect x=\"158\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"180\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><rect x=\"204\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"226\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><rect x=\"250\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"272\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">8</text><text x=\"272\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"296\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"318\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">10</text><text x=\"318\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><rect x=\"342\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"364\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">12</text><text x=\"364\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">7</text><rect x=\"388\" y=\"56\" width=\"44\" height=\"44\" class=\"f-none s-muted\" stroke-dasharray=\"4 3\"/><text x=\"410\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-muted\">8 = n</text><line x1=\"134\" y1=\"176\" x2=\"134\" y2=\"132\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"134\" y=\"200\" text-anchor=\"middle\" class=\"t-sm t-accent\">lower_bound(5) = 2</text><line x1=\"410\" y1=\"176\" x2=\"410\" y2=\"132\" class=\"s-muted\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><text x=\"410\" y=\"200\" text-anchor=\"middle\" class=\"t-sm t-muted\">hi starts at n (exclusive)</text></svg>"
+    },
+    "m04-koko-speeds": {
+      "caption": "Koko with piles `[3,6,7,11]` and `h = 8`: each cell is a candidate speed `k`, the number under it is the hours needed. Speeds 1–3 need more than 8 hours (infeasible); 4 and up all work. The answer is the boundary: speed 4.",
+      "svg": "<svg viewBox=\"0 0 660 216\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Koko eating speeds 1 to 11 with hours needed under each; speeds 4 and up are feasible, arrow marks speed 4\"><text x=\"20\" y=\"24\" class=\"t-bold\">Koko: piles [3, 6, 7, 11], h = 8</text><rect x=\"20\" y=\"52\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"42\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-bad\">1</text><text x=\"42\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">27</text><rect x=\"66\" y=\"52\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"88\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-bad\">2</text><text x=\"88\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">15</text><rect x=\"112\" y=\"52\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"134\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-bad\">3</text><text x=\"134\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">10</text><rect x=\"158\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"180\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">4</text><text x=\"180\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">8</text><rect x=\"204\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"226\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">5</text><text x=\"226\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">8</text><rect x=\"250\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"272\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">6</text><text x=\"272\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><rect x=\"296\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"318\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">7</text><text x=\"318\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"342\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"364\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">8</text><text x=\"364\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"388\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"410\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">9</text><text x=\"410\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"434\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"456\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">10</text><text x=\"456\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"480\" y=\"52\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"502\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-ok\">11</text><text x=\"502\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><line x1=\"180\" y1=\"170\" x2=\"180\" y2=\"128\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"180\" y=\"194\" text-anchor=\"middle\" class=\"t-sm t-accent\">min feasible speed = 4</text><text x=\"450\" y=\"194\" text-anchor=\"middle\" class=\"t-sm t-muted\">cell = speed k, below = hours needed; hours ≤ 8 ⇒ feasible</text></svg>"
+    },
+    "m04-rotated-halves": {
+      "caption": "`[4,5,6,7,0,1,2]` with `mid` at index 3: comparing `a[lo]=4 ≤ a[mid]=7` proves the left half is sorted, so a simple range check decides which half to discard. The pivot drop (7 → 0) always hides in exactly one half.",
+      "svg": "<svg viewBox=\"0 0 660 208\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Rotated array 4 5 6 7 0 1 2: left half sorted, right half contains the pivot drop\"><text x=\"20\" y=\"24\" class=\"t-bold\">one half is always sorted</text><rect x=\"20\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">4</text><text x=\"42\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><rect x=\"66\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"88\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><rect x=\"112\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">6</text><text x=\"134\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><rect x=\"158\" y=\"64\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"180\" y=\"92\" text-anchor=\"middle\" class=\"t-mono t-accent\">7</text><text x=\"180\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><rect x=\"204\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">0</text><text x=\"226\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><rect x=\"250\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"272\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">1</text><text x=\"272\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><rect x=\"296\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"318\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"318\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><line x1=\"22\" y1=\"150\" x2=\"200\" y2=\"150\" class=\"s-ok\" stroke-width=\"2\"/><text x=\"111\" y=\"174\" text-anchor=\"middle\" class=\"t-sm t-ok\">sorted ✓</text><line x1=\"206\" y1=\"150\" x2=\"338\" y2=\"150\" class=\"s-bad\" stroke-width=\"2\"/><text x=\"272\" y=\"174\" text-anchor=\"middle\" class=\"t-sm t-bad\">contains the drop</text><text x=\"380\" y=\"76\" class=\"t-sm t-mono\">a[lo]=4 ≤ a[mid]=7</text><text x=\"380\" y=\"104\" class=\"t-sm t-ok\">⇒ left half [lo..mid] is sorted</text><text x=\"380\" y=\"132\" class=\"t-sm t-muted\">target in [4, 7) ? go left : go right</text></svg>"
+    },
+    "m04-median-partition": {
+      "caption": "Median of two sorted arrays: cut `A` after `i = 2` elements and `B` after `j = half − i = 3`. The partition is valid when both **cross-checks** hold (`A[i−1] ≤ B[j]` and `B[j−1] ≤ A[i]`); then the median comes from the four boundary values only.",
+      "svg": "<svg viewBox=\"0 0 660 248\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Two sorted arrays A and B each cut by a dashed line; left parts form the left half of the merged order, cross checks verify the partition\"><text x=\"20\" y=\"24\" class=\"t-bold\">cut A at i, B at j = half − i</text><text x=\"34\" y=\"88\" class=\"t-bold\">A</text><rect x=\"60\" y=\"60\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"82\" y=\"88\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"106\" y=\"60\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"128\" y=\"88\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"152\" y=\"60\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"174\" y=\"88\" text-anchor=\"middle\" class=\"t-mono\">8</text><rect x=\"198\" y=\"60\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"220\" y=\"88\" text-anchor=\"middle\" class=\"t-mono\">9</text><text x=\"34\" y=\"182\" class=\"t-bold\">B</text><rect x=\"60\" y=\"154\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"82\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"106\" y=\"154\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"128\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"152\" y=\"154\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"174\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"198\" y=\"154\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"220\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">7</text><rect x=\"244\" y=\"154\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"266\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">10</text><rect x=\"290\" y=\"154\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"312\" y=\"182\" text-anchor=\"middle\" class=\"t-mono\">12</text><line x1=\"151\" y1=\"50\" x2=\"151\" y2=\"112\" class=\"s-accent\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/><text x=\"151\" y=\"132\" text-anchor=\"middle\" class=\"t-sm t-accent\">i = 2</text><line x1=\"197\" y1=\"144\" x2=\"197\" y2=\"206\" class=\"s-accent\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/><text x=\"197\" y=\"226\" text-anchor=\"middle\" class=\"t-sm t-accent\">j = 3</text><text x=\"380\" y=\"72\" class=\"t-sm t-muted\">left half = {1, 3} ∪ {2, 4, 6}</text><text x=\"380\" y=\"100\" class=\"t-sm t-mono\">A[i−1]=3 ≤ B[j]=7 ✓</text><text x=\"380\" y=\"128\" class=\"t-sm t-mono\">B[j−1]=6 ≤ A[i]=8 ✓</text><text x=\"380\" y=\"156\" class=\"t-sm t-ok\">valid partition</text><text x=\"380\" y=\"184\" class=\"t-sm t-ok\">median = (6 + 7) / 2 = 6.5</text></svg>"
+    }
+  }
+}

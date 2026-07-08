@@ -1,0 +1,258 @@
+{
+  "tag": "m12",
+  "week": "Week 7 · Module 12",
+  "title": "Dynamic Programming I",
+  "priority": "moderate",
+  "summary": "DP is the single most cited topic in Microsoft OA writeups, and it anchors every Flipkart and Trilogy hard set. The good news: roughly 80% of DP problems are variations of five or six templates. This module gives you the 1-D and knapsack shapes — learn each one's *silhouette* and you will recognize it under a timer.",
+  "notes": [
+    {
+      "heading": "How to smell a DP problem",
+      "body": "Before any template, you need the *detector*. DP problems rarely announce themselves — they hide behind stories about stairs, robbers, and coins. Here are the tells, and any one of them should make you think DP:\n\n- The question asks for the **number of ways**, the **min/max cost or value**, or **is it possible** to reach a target. Notice what it does *not* ask for: a specific arrangement. It wants an aggregate over all arrangements — that is an optimization or counting answer.\n- You make a **sequence of choices** (take or skip an item, step 1 or 2, pick a coin), and each choice leaves you facing a **smaller copy of the same problem**.\n- A brute-force recursion works but **recomputes the same subproblem** over and over — the recursion tree has overlapping branches, and the runtime blows up to $O(2^n)$.\n- The answer at index `i` depends only on a **few earlier answers**: `i-1`, `i-2`, or \"some `j < i`\".\n- **Greedy fails on a small counterexample.** When greedy feels almost right but you can break it by hand, DP is usually the correct tool.\n\n> [!EXAMPLE] Greedy breaks — DP doesn't\n> Coin change with coins `{1, 3, 4}` and amount `6`. Greedy grabs the biggest coin first: `4 + 1 + 1` = 3 coins. The optimum is `3 + 3` = **2 coins**. The moment you find a counterexample like this, stop trying to patch the greedy and switch to DP.\n\n> [!KEY]\n> \"Number of ways / min cost / is it possible\" + \"choices that shrink the problem\" = DP. Say it to yourself as a checklist when you first read a problem.\n\n> [!EXAM]\n> In a Microsoft-style OA, the DP problem is usually the one whose brute force is *obvious* but clearly too slow. If you can write the recursion in your head in 30 seconds, and it branches, you are almost certainly meant to memoize it."
+    },
+    {
+      "heading": "State, transition, base case — say it before you code it",
+      "body": "Every DP — every single one — is three things:\n\n1. **State**: what parameters uniquely describe a subproblem. (\"`dp[i]` = the answer for the first `i` elements.\")\n2. **Transition**: how a state's answer is built from smaller states. (The recurrence.)\n3. **Base case**: the smallest states you can answer directly, no recursion needed.\n\nNail these three *in words* before writing any code. This is not just discipline — it is literally the script interviewers grade you on.\n\nWhy does caching help so much? Look at what the naive recursion actually does:\n\n[[fig:m12-overlap-tree]]\n\nThe tree recomputes `f(3)` and `f(2)` from scratch every time it meets them. With $n$ levels of branching that is exponential work — but there are only $n$ *distinct* states. Cache each state once and the exponential tree collapses to a linear pass.\n\n> [!INTUITION]\n> DP is not a new algorithm — it is brute-force recursion plus a notebook. You do the dumb recursion, but the first time you solve a subproblem you write the answer down, and every later visit is a lookup.\n\nTwo ways to implement the same recurrence:\n\n- **Memoization (top-down):** write the natural recursion, cache results in a `dp[]` array. Easiest to derive — start here under pressure.\n- **Tabulation (bottom-up):** fill `dp[]` from base cases upward with a loop. Usually faster (no recursion overhead) and it unlocks space optimization.\n\n```cpp\n// ---------- TEMPLATE A: Top-down memoization ----------\n// Example shape: min cost / count of ways from state i.\nvector<int> memo;              // sized n+1, init to -1 (= \"not computed\")\n\nint solve(int i, /* other state */ vector<int>& a) {\n    // 1. BASE CASE(S): smallest solvable states\n    if (i < 0) return 0;               // adapt to the problem\n    // 2. MEMO CHECK: already computed?\n    if (memo[i] != -1) return memo[i];\n    // 3. TRANSITION: try every choice, combine sub-answers\n    int best = INT_MAX;                // or 0 for counting, then +=\n    best = min(best, solve(i - 1, a) /* + cost */);\n    best = min(best, solve(i - 2, a) /* + cost */);\n    // 4. STORE and return\n    return memo[i] = best;\n}\n// call: memo.assign(n + 1, -1); solve(n, a);\n\n// ---------- TEMPLATE B: Bottom-up tabulation ----------\nint tabulate(vector<int>& a) {\n    int n = a.size();\n    vector<int> dp(n + 1);\n    dp[0] = /* base */ 0;               // seed base case(s)\n    for (int i = 1; i <= n; ++i) {      // fill in dependency order\n        dp[i] = /* combine dp[i-1], dp[i-2], ... */ 0;\n    }\n    return dp[n];\n}\n```\n\n> [!ANALOGY]\n> Top-down is asking a chain of friends and writing each answer in a notebook so nobody is asked twice. Bottom-up is filling in a spreadsheet row by row, where every cell only references cells you have already filled. Same numbers, different order of discovery.\n\n> [!PITFALL] Memo sentinel collision\n> Don't initialize `memo` to `-1` if `-1` is a *legal answer* for the problem (e.g., \"return -1 if impossible\"). Use a distinct sentinel like `INT_MIN`, or a separate `visited[]` array. This bug produces answers that are correct on small tests and wrong on exactly the cases the judge hides."
+    },
+    {
+      "heading": "Knapsack, the workhorse: 0/1 vs unbounded",
+      "body": "You have never done knapsack before, so let's build it honestly. **Setup:** items with `weight[i]` and `value[i]`, a capacity `W`, maximize total value. In the **0/1** version each item is used at most once; in the **unbounded** version items are reusable. An enormous number of OA problems — subset sums, coin problems, partition problems — are one of these two in costume.\n\nBoth compress to a single 1-D array `dp[c]` = best value achievable with capacity `c`. And here is the punchline you must memorize: **the direction of the inner capacity loop is the *entire* difference between them.**\n\n```cpp\n// ---------- TEMPLATE C: 0/1 Knapsack (2-D -> 1-D) ----------\n// items with weight[i], value[i]; capacity W. Each item used 0 or 1 times.\nint knapsack01(vector<int>& wt, vector<int>& val, int W) {\n    int n = wt.size();\n    vector<int> dp(W + 1, 0);          // dp[c] = best value with capacity c\n    for (int i = 0; i < n; ++i)\n        // KEY: loop capacity DOWNWARD so item i is used at most once\n        for (int c = W; c >= wt[i]; --c)\n            dp[c] = max(dp[c], dp[c - wt[i]] + val[i]);\n    return dp[W];\n}\n\n// ---------- TEMPLATE D: Unbounded knapsack (item reusable) ----------\nint knapsackUnbounded(vector<int>& wt, vector<int>& val, int W) {\n    int n = wt.size();\n    vector<int> dp(W + 1, 0);\n    for (int i = 0; i < n; ++i)\n        // KEY: loop capacity UPWARD so item i can be reused\n        for (int c = wt[i]; c <= W; ++c)\n            dp[c] = max(dp[c], dp[c - wt[i]] + val[i]);\n    return dp[W];\n}\n```\n\nWhy does direction matter? When you compute `dp[c]`, you read `dp[c - wt[i]]`. Going **downward**, that smaller index hasn't been touched yet this pass — it still holds the *previous item's* value, so item `i` enters at most once. Going **upward**, the smaller index was *already updated with item `i` this same pass* — so reading it lets item `i` stack on top of itself, which is exactly what \"unbounded\" means.\n\n[[fig:m12-knap-direction]]\n\n> [!KEY]\n> Downward loop = 0/1 (each item once). Upward loop = unbounded (item reusable). Before writing the inner loop, say out loud which one the problem needs. This is the #1 DP bug in the wild.\n\n> [!EXAM]\n> Complexity of both: $O(n \\cdot W)$ time, $O(W)$ space. Quote it as \"states × work per state\" — $W{+}1$ states per item, $O(1)$ transition. Note that this depends on the *numeric value* of `W`, not just input length — that's why knapsack is called pseudo-polynomial, and why OA constraints on the target value tell you whether this approach fits."
+    },
+    {
+      "heading": "Loop order decides what you're counting",
+      "body": "Here is the subtlest bug in all of 1-D DP, and it appears directly in two ladder problems (Coin Change II vs Combination Sum IV). Both use one `dp[]` array and the same `dp[a] += dp[a - coin]` line — yet nesting the loops one way counts **combinations** and the other way counts **permutations**.\n\n- **Coins outer, amount inner** → when you process coin `c`, all previous coins are completely finished. Every counted way uses coins in one fixed order, so `{1,2}` and `{2,1}` can never both be counted. That's **combinations** — what Coin Change II wants.\n- **Amount outer, coins inner** → at every amount you may pick *any* coin next, including revisiting small coins after large ones. `{1,2}` and `{2,1}` are counted separately. That's **permutations** — what Combination Sum IV wants.\n\n[[fig:m12-loop-order]]\n\n> [!KEY]\n> The outer loop is the dimension whose order you want to **ignore**. Want order not to matter? Fix the coins outside. Want ordered sequences? Iterate the amount outside. Say this sentence out loud in the interview — it proves you understand *why*, not just *what*.\n\n> [!EXAM]\n> Counting DPs overflow `int` easily — Coin Change II and Combination Sum IV are both known for it. Default to `long long` (or `unsigned long long`) for counting arrays, and apply `% 1'000'000'007` when the statement asks for answers mod $10^9{+}7$."
+    },
+    {
+      "heading": "Pitfalls, edge cases, and how to narrate DP in an interview",
+      "body": "The classic bugs, collected in one place — read this list again the night before each OA:\n\n- **Wrong knapsack loop direction** — downward = 0/1, upward = unbounded. Announce which one you need before coding the loop.\n- **Coin Change vs Coin Change II nesting** — outer loop = the dimension whose order you ignore. Backwards nesting silently computes permutations instead of combinations (or vice versa).\n- **Base-case off-by-one** — `dp[0]` must mean something concrete. For counting it's usually `1` (one empty way to make zero); for min-cost it's `0`. Get this wrong and *every* downstream cell is wrong — often by exactly one, which is maddening to debug under a timer.\n- **The infinity sentinel** — in min-coins style DP, initialize unreachable states to a large value, but beware `INF + coin` overflowing `int`. Check `dp[i] != INF` *before* adding to it, and return `-1` if the target stays unreachable.\n- **Memo init collision** — `-1` as \"not computed\" breaks when `-1` is a legal answer.\n\n> [!WARNING] Overflow is a silent killer\n> Counting problems can exceed $2^{31}-1$ well within the given constraints. `int` wraps around without any error, and your code passes samples but fails hidden tests. Reach for `long long` by default in any `+=` counting DP.\n\n**Edge cases to state before coding:** empty input, target `= 0`, a single element, all-negative arrays (Maximum Product Subarray), and a target larger than any achievable sum.\n\n**The narration script** — interviewers grade this as much as the code:\n\n1. \"Let me define the **state**: `dp[i]` means ___.\" One sentence, no hand-waving.\n2. \"The **transition** is ___ because at each step my choices are ___.\" Show the recurrence.\n3. \"**Base cases** are ___.\" Then: \"top-down would be a clean recursion plus memo; I'll write bottom-up for speed.\"\n4. Give the **complexity** as states × work-per-state — e.g. \"$O(n \\cdot W)$: $n \\cdot W$ states, $O(1)$ per transition.\"\n5. If time allows, mention the **space optimization** (drop a dimension by reusing a row). Interviewers love hearing you know it exists even if you don't code it.\n\n> [!EXAM]\n> Under pressure, always write the brute-force recursion **first**, then bolt on the memo. Deriving tabulation from a blank page is where people freeze. The recursion tree hands you the state and the transition for free — tabulation is just the same recurrence read bottom-up.\n\n> [!NOTE]\n> You're strong at implementation, so your risk here isn't syntax — it's *pattern recognition speed*. The ladder below is ordered so each problem is a small twist on the previous one. Do the 🎯 problems until the recurrence comes to you within two minutes of reading the statement."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Climbing Stairs",
+      "url": "https://leetcode.com/problems/climbing-stairs/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The \"hello world\" of 1-D DP: `dp[i] = dp[i-1] + dp[i-2]` — get it fluent, everything below builds on it."
+    },
+    {
+      "name": "Min Cost Climbing Stairs",
+      "url": "https://leetcode.com/problems/min-cost-climbing-stairs/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Same recurrence, now *minimizing* cost — perfect base-case practice."
+    },
+    {
+      "name": "House Robber",
+      "url": "https://leetcode.com/problems/house-robber/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The take/skip archetype: `dp[i] = max(dp[i-1], dp[i-2] + a[i])`."
+    },
+    {
+      "name": "House Robber II",
+      "url": "https://leetcode.com/problems/house-robber-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Circular street: run House Robber twice — once excluding the first house, once excluding the last."
+    },
+    {
+      "name": "Coin Change",
+      "url": "https://leetcode.com/problems/coin-change/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Min coins to hit a target — unbounded knapsack with `min`; guard the INF sentinel before adding to it."
+    },
+    {
+      "name": "Coin Change II",
+      "url": "https://leetcode.com/problems/coin-change-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "*Count ways* to make amount — coin loop must be OUTER or you count permutations instead of combinations."
+    },
+    {
+      "name": "Partition Equal Subset Sum",
+      "url": "https://leetcode.com/problems/partition-equal-subset-sum/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "0/1 knapsack in disguise: can any subset hit `sum/2`? Downward capacity loop."
+    },
+    {
+      "name": "Target Sum",
+      "url": "https://leetcode.com/problems/target-sum/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Assign +/− signs; the algebra `(sum + target)/2` turns it into subset-sum knapsack."
+    },
+    {
+      "name": "Longest Increasing Subsequence",
+      "url": "https://leetcode.com/problems/longest-increasing-subsequence/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Do the $O(n^2)$ DP first, then the clever $O(n \\log n)$ patience-sort `tails` + `lower_bound` version."
+    },
+    {
+      "name": "Word Break",
+      "url": "https://leetcode.com/problems/word-break/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "1-D DP over string prefixes: `dp[i]` = can the prefix of length `i` be segmented, checked against a dictionary set."
+    },
+    {
+      "name": "Combination Sum IV",
+      "url": "https://leetcode.com/problems/combination-sum-iv/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Count *ordered* sequences summing to target — amount loop OUTER (permutation-style); watch for `int` overflow."
+    },
+    {
+      "name": "Perfect Squares",
+      "url": "https://leetcode.com/problems/perfect-squares/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Min count of squares summing to `n` — pure unbounded-knapsack flavor."
+    },
+    {
+      "name": "Maximum Product Subarray",
+      "url": "https://leetcode.com/problems/maximum-product-subarray/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Track the running min *and* max — a negative number flips them in one swap."
+    },
+    {
+      "name": "Delete and Earn",
+      "url": "https://leetcode.com/problems/delete-and-earn/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Bucket points by value, then it's House Robber in disguise on the buckets."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Coin Change II — why loop order decides combinations vs permutations.** Count the number of ways to make `amount` using coins, each coin unlimited, where order does *not* matter: {1,2} and {2,1} are the same way. Both loop nestings compile, both look plausible — only one is correct. Why?",
+      "url": "https://leetcode.com/problems/coin-change-ii/",
+      "tag": "loop-order",
+      "answer": "**The trap:** the naive instinct is one `dp[]` array with both loops, and the order you nest them silently changes the answer — no crash, no warning, just a wrong count that passes the tiny examples.\n\n```cpp\n// COMBINATIONS (correct for Coin Change II): coins OUTER, amount INNER\nint change(int amount, vector<int>& coins) {\n    vector<unsigned long long> dp(amount + 1, 0);\n    dp[0] = 1;                      // one way to make 0: take nothing\n    for (int coin : coins)          // fix a coin, then extend all amounts\n        for (int a = coin; a <= amount; ++a)\n            dp[a] += dp[a - coin];\n    return (int)dp[amount];\n}\n```\n\n**Why it works:** by putting the coin loop *outside*, when you process coin `c` you have already completely finished every coin before it. So every way you count uses coins in one fixed, non-decreasing order — you can never count {1 then 2} and {2 then 1} separately. That is exactly what \"combinations\" means.\n\n**The contrast:** swap the loops (amount outer, coin inner) and at every amount you're allowed to pick *any* coin next, including revisiting smaller coins after larger ones. Now {1,2} and {2,1} are counted as distinct — that computes **permutations**, which is precisely Combination Sum IV. Same array, same `+=`, opposite meaning.\n\n[[fig:m12-loop-order]]\n\n> [!KEY]\n> Say it out loud in the interview: *\"the outer loop is the thing whose order I want to ignore.\"* One sentence, and the interviewer knows you understand the mechanism rather than having memorized a snippet.\n\nNote the `unsigned long long` — way-counting grows fast and overflows `int` inside the given constraints.\n\n**Complexity:** $O(n \\cdot \\text{amount})$ time, $O(\\text{amount})$ space."
+    },
+    {
+      "q": "**0/1 Knapsack — why the 1-D inner loop must run backwards.** The classic 2-D table `dp[i][c]` compresses into a single 1-D row to save memory. Which direction must the capacity loop run after the compression, and what silently breaks if you pick the wrong one?",
+      "tag": "downward-loop",
+      "answer": "Start from the honest 2-D table: `dp[i][c]` = best value using the first `i` items with capacity `c`. The transition has two choices — skip item `i` → `dp[i-1][c]`; take it → `dp[i-1][c - wt[i]] + val[i]`.\n\nThe critical detail: \"take\" reads from row **`i-1`** — the *previous* item's state. That is what guarantees item `i` is used at most once: the sub-state you build on has never seen item `i`.\n\nNow compress to 1-D by reusing a single row in place. The danger: if we loop capacity **upward**, then by the time we compute `dp[c]` we read `dp[c - wt[i]]` — which was *already overwritten earlier in this very pass*, so it already contains item `i`. Reading it stacks item `i` on itself: you have silently turned 0/1 into unbounded.\n\n```cpp\nfor (int i = 0; i < n; ++i)\n    for (int c = W; c >= wt[i]; --c)   // DOWNWARD\n        dp[c] = max(dp[c], dp[c - wt[i]] + val[i]);\n//  reading dp[c - wt[i]] here still holds the OLD (item i-1) value,\n//  because we haven't touched any index < c yet this iteration.\n```\n\n[[fig:m12-knap-direction]]\n\n> [!INTUITION]\n> Think of the downward loop as walking backwards through the row so your own footprints are always *behind* you. Every cell you read is still pristine from the previous item; every cell you've dirtied is at higher capacity, which you'll never read again this pass.\n\nThis single fact is why 0/1 knapsack, Partition Equal Subset Sum, and Target Sum all use a downward loop — and why the unbounded family (Coin Change, Perfect Squares) uses an upward one. One loop direction, two different problems.\n\n**Complexity:** $O(n \\cdot W)$ time, $O(W)$ space."
+    },
+    {
+      "q": "**Longest Increasing Subsequence in O(n log n) — the patience trick.** The $O(n^2)$ DP (`dp[i]` = LIS ending at `i`, scan every `j < i`) is easy but too slow for large `n`. How does maintaining a `tails` array plus a binary search recover the LIS *length* in $O(n \\log n)$?",
+      "url": "https://leetcode.com/problems/longest-increasing-subsequence/",
+      "tag": "patience-lis",
+      "answer": "The clever version is not really \"DP\" anymore — it is *patience sorting*, the card game.\n\n**The idea:** maintain an array `tails`, where `tails[k]` = the **smallest possible tail value** of any increasing subsequence of length `k+1` seen so far. This array is always sorted (a longer run needs a bigger tail). For each new number `x`: find the first `tails[k] >= x` and overwrite it with `x`; if `x` is bigger than everything, append it.\n\n```cpp\nint lengthOfLIS(vector<int>& a) {\n    vector<int> tails;\n    for (int x : a) {\n        auto it = lower_bound(tails.begin(), tails.end(), x);\n        if (it == tails.end()) tails.push_back(x);   // extends longest run\n        else *it = x;                                 // keep tails minimal\n    }\n    return tails.size();                              // length only\n}\n```\n\nWatch it run on `a = [10, 9, 2, 5, 3, 7]`:\n\n[[fig:m12-lis-tails]]\n\n**Why replacing works:** overwriting `tails[k]` with a smaller `x` never shrinks the answer — the length-`k+1` subsequence still exists — it only makes *future* extensions easier, because a smaller tail is easier to beat. Keeping every tail as small as possible is a dominance argument: nothing is ever lost, opportunities are only gained.\n\n> [!PITFALL]\n> `tails` is **not** an actual subsequence — it's a bookkeeping array where each slot may come from a *different* candidate subsequence. Its **length** is the LIS length, but do not try to read the LIS elements off it directly. (Recovering the actual sequence needs extra parent-tracking.)\n\nTwo details worth saying in an interview: `lower_bound` is what delivers the $O(\\log n)$ per element, and swapping it for `upper_bound` handles the *longest non-decreasing* variant (duplicates allowed).\n\n**Complexity:** $O(n \\log n)$ time, $O(n)$ space."
+    },
+    {
+      "q": "**Partition Equal Subset Sum — spotting knapsack in disguise.** Can you split an array into two subsets with equal sums? Nothing in the statement says \"knapsack\" — recognizing the reduction *is* the whole difficulty.",
+      "url": "https://leetcode.com/problems/partition-equal-subset-sum/",
+      "tag": "subset-sum",
+      "answer": "**The reduction, step by step.** Let the total be `S`. If `S` is odd, splitting into two equal halves is instantly impossible — return `false` in one line (and score points for saying so before coding). Otherwise the two subsets must each sum to `S/2`, and since the second subset is just \"everything else,\" the question collapses to: *does some subset sum to exactly `S/2`?*\n\nThat is a 0/1 knapsack where weight = value = the element itself, and we only care about **reachability** — a boolean, not a max.\n\n```cpp\nbool canPartition(vector<int>& nums) {\n    int S = accumulate(nums.begin(), nums.end(), 0);\n    if (S & 1) return false;\n    int target = S / 2;\n    vector<char> dp(target + 1, false);\n    dp[0] = true;                          // sum 0 always reachable\n    for (int x : nums)\n        for (int c = target; c >= x; --c)  // DOWNWARD: each item once\n            dp[c] = dp[c] || dp[c - x];\n    return dp[target];\n}\n```\n\nThe downward loop is doing exactly the job explained in the knapsack deep dive: each element may join the subset at most once. Run it upward and one element could be \"used\" repeatedly — a different (wrong) problem.\n\n> [!KEY] The lesson worth generalizing\n> Whenever a problem says \"pick a subset to hit an exact total / balance / difference,\" translate it to subset-sum knapsack. **Target Sum** is the same trick after algebra: splitting into `+` and `−` groups with `plus − minus = target` and `plus + minus = sum` gives `plus = (sum + target)/2` — a subset-sum with that target. Interviewers love this family because the disguise, not the code, is the difficulty.\n\n(Minor touch: `vector<char>` instead of `vector<bool>` dodges the bit-packed proxy quirks of `vector<bool>` — cheap insurance in C++.)\n\n**Complexity:** $O(n \\cdot S)$ time, $O(S)$ space."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: \"Given a string of digits, count how many distinct ways it can be decoded into letters (1→A … 26→Z).\" What's the strongest tell that this is a DP problem?",
+      "options": [
+        "The answer requires generating every decoding, so backtracking is forced",
+        "It asks for the *number of ways*, and each choice (take 1 digit or 2) leaves a smaller copy of the same problem",
+        "Strings always imply the two-pointer pattern",
+        "The alphabet is fixed at 26, so a greedy over letters works"
+      ],
+      "answer": 1,
+      "explanation": "\"Count the ways\" + \"choices that shrink the problem\" is the DP signature: `dp[i]` = ways to decode the first `i` digits, built from `dp[i-1]` and `dp[i-2]`. Backtracking (option A) *enumerates* decodings — exponential and unnecessary when only the count is asked. That distinction (aggregate answer vs explicit arrangements) is exactly how you pick DP over backtracking under a timer.",
+      "tag": "pattern-recognition"
+    },
+    {
+      "q": "In the 1-D 0/1 knapsack template, you accidentally write the inner loop as `for (int c = wt[i]; c <= W; ++c)` (upward) instead of downward. What happens?",
+      "options": [
+        "Nothing — the loop direction only affects performance, not correctness",
+        "The array indexes out of bounds for small W",
+        "Each item can now be counted multiple times — you've silently computed the *unbounded* knapsack",
+        "The answer is correct only when all weights are equal"
+      ],
+      "answer": 2,
+      "explanation": "Going upward, `dp[c - wt[i]]` was already updated *this same pass*, so it may already include item `i` — reading it stacks the item on itself. That is the definition of unbounded knapsack. No crash, no warning: it's the #1 DP bug precisely because the code looks fine and passes tiny tests where reuse doesn't help.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "For Coin Change II (count ways where order does NOT matter), you nest the loops as `for (a = 1..amount) for (coin : coins)`. What does your code actually compute?",
+      "options": [
+        "Permutations — ordered sequences, so {1,2} and {2,1} are counted separately (this is Combination Sum IV)",
+        "Combinations, as required — nesting order doesn't change the sum",
+        "The minimum number of coins instead of the count",
+        "Always exactly double the correct answer"
+      ],
+      "answer": 0,
+      "explanation": "With the amount outer, every amount may extend by *any* coin next, including revisiting small coins after large ones — so orderings are distinguished, which counts permutations. That's the correct nesting for Combination Sum IV but wrong for Coin Change II. Rule: the outer loop is the dimension whose order you want to ignore. Option D is tempting but false — the inflation factor depends on how many rearrangements each multiset has, not a constant 2.",
+      "tag": "loop-order"
+    },
+    {
+      "q": "What are the time and space complexities of the 1-D 0/1 knapsack template (Template C) with `n` items and capacity `W`?",
+      "options": [
+        "$O(n + W)$ time, $O(W)$ space",
+        "$O(n \\log W)$ time, $O(n)$ space",
+        "$O(n \\cdot W)$ time, $O(n \\cdot W)$ space",
+        "$O(n \\cdot W)$ time, $O(W)$ space"
+      ],
+      "answer": 3,
+      "explanation": "Count states × work per state: for each of the `n` items the inner loop touches up to `W+1` capacities with $O(1)$ work — $O(n \\cdot W)$ time. The whole point of the downward-loop compression is that one reused row of size `W+1` suffices, so space is $O(W)$, not $O(n \\cdot W)$ (that's the uncompressed 2-D table of option C). Bonus: this is *pseudo-polynomial* — it scales with the numeric value of W, not the input length.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Trace House Robber (`dp[i] = max(dp[i-1], dp[i-2] + a[i])`) on `a = [2, 7, 9, 3, 1]`. What is the final answer?",
+      "options": [
+        "10",
+        "11",
+        "12",
+        "13"
+      ],
+      "answer": 2,
+      "explanation": "dp = [2, 7, max(7, 2+9)=11, max(11, 7+3)=11, max(11, 11+1)=12] → **12**, robbing houses 2+9+1 (indices 0, 2, 4). Option B (11) is what you get if you stop one house early or forget that dp[4] can build on dp[2]'s 11 — always run the recurrence through the *entire* array.",
+      "tag": "trace"
+    },
+    {
+      "q": "In a counting DP like Coin Change II, why must the base case be `dp[0] = 1` rather than `0`?",
+      "options": [
+        "Because there is exactly one way to make amount 0 — take nothing — and every complete way is counted the moment it reaches 0",
+        "It's an arbitrary convention; 0 works too as long as you add 1 at the end",
+        "To avoid division by zero in the transition",
+        "Because dp arrays must always start at 1 to prevent underflow"
+      ],
+      "answer": 0,
+      "explanation": "`dp[0] = 1` encodes \"the empty selection is one valid way to make zero.\" Every counted way bottoms out through `dp[0]`; if it were 0, every `+=` chain would propagate zeros and the final answer would be 0 no matter what. Option B is wrong: adding 1 at the end would count exactly one way total, not fix the recurrence. Base cases carry *meaning* — get the meaning right and the value follows.",
+      "tag": "base-case"
+    },
+    {
+      "q": "Run the $O(n \\log n)$ LIS algorithm (`tails` + `lower_bound`) on `a = [3, 1, 4, 1, 5]`. What is `tails` when the loop finishes?",
+      "options": [
+        "[3, 4, 5]",
+        "[1, 4, 5]",
+        "[1, 1, 4, 5]",
+        "[1, 5]"
+      ],
+      "answer": 1,
+      "explanation": "3 → [3]; 1 replaces 3 → [1]; 4 appends → [1,4]; the second 1: `lower_bound` finds the existing 1 (first element ≥ 1) and overwrites it in place → [1,4] unchanged in length; 5 appends → **[1,4,5]**, LIS length 3. Option C is the classic mistake of appending the duplicate — `lower_bound` (not `upper_bound`) treats equal values as \"replace,\" which is what makes this the *strictly* increasing version.",
+      "tag": "trace"
+    }
+  ],
+  "figures": {
+    "m12-overlap-tree": {
+      "caption": "The naive recursion tree for `climb(5)`. The highlighted nodes — `f(3)` twice, `f(2)` twice (three times in the full tree) — are identical subproblems recomputed from scratch. Memoize each state once and the exponential tree collapses to just $n$ unique states.",
+      "svg": "<svg viewBox='0 0 660 310' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Recursion tree for climb(5) with repeated subproblems highlighted'><text x='20' y='24' class='t-bold'>climb(5) without memoization</text><line x1='314' y1='91' x2='226' y2='153' class='s-line' marker-end='url(#dg-arrow)'/><line x1='346' y1='91' x2='434' y2='153' class='s-line' marker-end='url(#dg-arrow)'/><line x1='196' y1='178' x2='133' y2='237' class='s-line' marker-end='url(#dg-arrow)'/><line x1='224' y1='178' x2='287' y2='237' class='s-line' marker-end='url(#dg-arrow)'/><line x1='439' y1='181' x2='401' y2='235' class='s-line' marker-end='url(#dg-arrow)'/><line x1='461' y1='181' x2='499' y2='235' class='s-line' marker-end='url(#dg-arrow)'/><circle cx='330' cy='80' r='17' class='f-panel s-line'/><text x='330' y='85' text-anchor='middle' class='t-sm t-mono'>f(5)</text><circle cx='210' cy='165' r='17' class='f-panel s-line'/><text x='210' y='170' text-anchor='middle' class='t-sm t-mono'>f(4)</text><circle cx='450' cy='165' r='17' class='f-warn-soft s-line'/><text x='450' y='170' text-anchor='middle' class='t-sm t-mono'>f(3)</text><circle cx='120' cy='250' r='17' class='f-warn-soft s-line'/><text x='120' y='255' text-anchor='middle' class='t-sm t-mono'>f(3)</text><circle cx='300' cy='250' r='17' class='f-accent-soft s-accent'/><text x='300' y='255' text-anchor='middle' class='t-sm t-mono t-accent'>f(2)</text><circle cx='390' cy='250' r='17' class='f-accent-soft s-accent'/><text x='390' y='255' text-anchor='middle' class='t-sm t-mono t-accent'>f(2)</text><circle cx='510' cy='250' r='17' class='f-panel s-line'/><text x='510' y='255' text-anchor='middle' class='t-sm t-mono'>f(1)</text><text x='20' y='296' class='t-sm t-muted'>f(3) and f(2) are each solved more than once — cache them and the tree collapses to n unique states.</text></svg>"
+    },
+    "m12-knap-direction": {
+      "caption": "**One dp row, two loop directions** (item `i` has weight 3). Top: the 0/1 downward loop — when `dp[c]` is computed, `dp[c−w]` (green) is untouched this pass and still holds item `i−1`'s value, so item `i` enters at most once. Bottom: the unbounded upward loop — `dp[c−w]` (red) was already updated with item `i` this pass, so reading it reuses the item.",
+      "svg": "<svg viewBox='0 0 660 380' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Downward versus upward capacity loop in 1-D knapsack'><text x='20' y='24' class='t-bold'>0/1: inner loop DOWN (c = W ... wt[i])</text><text x='20' y='52' class='t-sm t-muted'>computing dp[6]: only dp[7], dp[8] have been touched this pass</text><rect x='20' y='64' width='44' height='44' class='f-panel s-line'/><rect x='66' y='64' width='44' height='44' class='f-panel s-line'/><rect x='112' y='64' width='44' height='44' class='f-panel s-line'/><rect x='158' y='64' width='44' height='44' class='f-ok-soft s-ok'/><text x='180' y='92' text-anchor='middle' class='t-sm t-mono t-ok'>c-w</text><rect x='204' y='64' width='44' height='44' class='f-panel s-line'/><rect x='250' y='64' width='44' height='44' class='f-panel s-line'/><rect x='296' y='64' width='44' height='44' class='f-accent-soft s-accent'/><text x='318' y='92' text-anchor='middle' class='t-mono t-accent'>c</text><rect x='342' y='64' width='44' height='44' class='f-panel2 s-line'/><text x='364' y='92' text-anchor='middle' class='t-sm t-muted'>new</text><rect x='388' y='64' width='44' height='44' class='f-panel2 s-line'/><text x='410' y='92' text-anchor='middle' class='t-sm t-muted'>new</text><text x='42' y='126' text-anchor='middle' class='t-sm t-muted'>0</text><text x='88' y='126' text-anchor='middle' class='t-sm t-muted'>1</text><text x='134' y='126' text-anchor='middle' class='t-sm t-muted'>2</text><text x='180' y='126' text-anchor='middle' class='t-sm t-muted'>3</text><text x='226' y='126' text-anchor='middle' class='t-sm t-muted'>4</text><text x='272' y='126' text-anchor='middle' class='t-sm t-muted'>5</text><text x='318' y='126' text-anchor='middle' class='t-sm t-muted'>6</text><text x='364' y='126' text-anchor='middle' class='t-sm t-muted'>7</text><text x='410' y='126' text-anchor='middle' class='t-sm t-muted'>8</text><line x1='318' y1='148' x2='190' y2='148' class='s-ok' stroke-width='2' marker-end='url(#dg-arrow-ok)'/><text x='254' y='172' text-anchor='middle' class='t-sm t-ok'>reads dp[c-w]: still item i-1's value — used once</text><text x='20' y='214' class='t-bold'>Unbounded: inner loop UP (c = wt[i] ... W)</text><text x='20' y='240' class='t-sm t-muted'>computing dp[6]: dp[3], dp[4], dp[5] already updated with item i</text><rect x='20' y='252' width='44' height='44' class='f-panel s-line'/><rect x='66' y='252' width='44' height='44' class='f-panel s-line'/><rect x='112' y='252' width='44' height='44' class='f-panel s-line'/><rect x='158' y='252' width='44' height='44' class='f-bad-soft s-bad'/><text x='180' y='280' text-anchor='middle' class='t-sm t-mono t-bad'>c-w</text><rect x='204' y='252' width='44' height='44' class='f-panel2 s-line'/><text x='226' y='280' text-anchor='middle' class='t-sm t-muted'>new</text><rect x='250' y='252' width='44' height='44' class='f-panel2 s-line'/><text x='272' y='280' text-anchor='middle' class='t-sm t-muted'>new</text><rect x='296' y='252' width='44' height='44' class='f-accent-soft s-accent'/><text x='318' y='280' text-anchor='middle' class='t-mono t-accent'>c</text><rect x='342' y='252' width='44' height='44' class='f-panel s-line'/><rect x='388' y='252' width='44' height='44' class='f-panel s-line'/><text x='42' y='314' text-anchor='middle' class='t-sm t-muted'>0</text><text x='88' y='314' text-anchor='middle' class='t-sm t-muted'>1</text><text x='134' y='314' text-anchor='middle' class='t-sm t-muted'>2</text><text x='180' y='314' text-anchor='middle' class='t-sm t-muted'>3</text><text x='226' y='314' text-anchor='middle' class='t-sm t-muted'>4</text><text x='272' y='314' text-anchor='middle' class='t-sm t-muted'>5</text><text x='318' y='314' text-anchor='middle' class='t-sm t-muted'>6</text><text x='364' y='314' text-anchor='middle' class='t-sm t-muted'>7</text><text x='410' y='314' text-anchor='middle' class='t-sm t-muted'>8</text><line x1='318' y1='336' x2='190' y2='336' class='s-bad' stroke-width='2' marker-end='url(#dg-arrow-bad)'/><text x='254' y='360' text-anchor='middle' class='t-sm t-bad'>reads dp[c-w]: already includes item i — reused!</text></svg>"
+    },
+    "m12-loop-order": {
+      "caption": "Coins `{1,2}`, amount 3 — the same `dp[a] += dp[a−coin]` line, filled with the two loop nestings. Coins-outer gives `dp[3] = 2` (combinations: {1,1,1}, {1,2}); amount-outer gives `dp[3] = 3` (permutations: {2,1} is now counted separately).",
+      "svg": "<svg viewBox='0 0 660 270' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Coin loop order: combinations versus permutations dp rows'><text x='20' y='24' class='t-bold'>coins {1,2}, amount 3 — nesting decides the meaning</text><text x='20' y='58' class='t-sm t-bold t-accent'>for (coin) / for (a)  →  COMBINATIONS</text><rect x='20' y='70' width='44' height='44' class='f-panel s-line'/><text x='42' y='98' text-anchor='middle' class='t-mono'>1</text><rect x='66' y='70' width='44' height='44' class='f-panel s-line'/><text x='88' y='98' text-anchor='middle' class='t-mono'>1</text><rect x='112' y='70' width='44' height='44' class='f-panel s-line'/><text x='134' y='98' text-anchor='middle' class='t-mono'>2</text><rect x='158' y='70' width='44' height='44' class='f-accent-soft s-accent'/><text x='180' y='98' text-anchor='middle' class='t-mono t-accent'>2</text><text x='42' y='132' text-anchor='middle' class='t-sm t-muted'>0</text><text x='88' y='132' text-anchor='middle' class='t-sm t-muted'>1</text><text x='134' y='132' text-anchor='middle' class='t-sm t-muted'>2</text><text x='180' y='132' text-anchor='middle' class='t-sm t-muted'>3</text><text x='240' y='98' class='t-sm t-muted'>dp[3] = 2 : {1,1,1} and {1,2}</text><text x='20' y='178' class='t-sm t-bold t-accent2'>for (a) / for (coin)  →  PERMUTATIONS</text><rect x='20' y='190' width='44' height='44' class='f-panel s-line'/><text x='42' y='218' text-anchor='middle' class='t-mono'>1</text><rect x='66' y='190' width='44' height='44' class='f-panel s-line'/><text x='88' y='218' text-anchor='middle' class='t-mono'>1</text><rect x='112' y='190' width='44' height='44' class='f-panel s-line'/><text x='134' y='218' text-anchor='middle' class='t-mono'>2</text><rect x='158' y='190' width='44' height='44' class='f-panel s-accent2'/><text x='180' y='218' text-anchor='middle' class='t-mono t-accent2'>3</text><text x='42' y='252' text-anchor='middle' class='t-sm t-muted'>0</text><text x='88' y='252' text-anchor='middle' class='t-sm t-muted'>1</text><text x='134' y='252' text-anchor='middle' class='t-sm t-muted'>2</text><text x='180' y='252' text-anchor='middle' class='t-sm t-muted'>3</text><text x='240' y='218' class='t-sm t-muted'>dp[3] = 3 : {2,1} counted separately</text></svg>"
+    },
+    "m12-lis-tails": {
+      "caption": "The `tails` array evolving over `a = [10, 9, 2, 5, 3, 7]` — the highlighted cell is what each `x` changed. Replacements keep every tail as small as possible; appends grow the length. The final **length** (3) is the LIS length — but `tails` itself is *not* an actual subsequence.",
+      "svg": "<svg viewBox='0 0 660 400' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='tails array snapshots for the O(n log n) LIS algorithm'><text x='20' y='24' class='t-bold'>tails[] over a = [10, 9, 2, 5, 3, 7]</text><text x='20' y='76' class='t-sm t-mono'>x=10</text><rect x='100' y='48' width='44' height='44' class='f-accent-soft s-accent'/><text x='122' y='76' text-anchor='middle' class='t-mono t-accent'>10</text><text x='260' y='76' class='t-sm t-muted'>tails empty — append, length 1</text><text x='20' y='134' class='t-sm t-mono'>x=9</text><rect x='100' y='106' width='44' height='44' class='f-accent-soft s-accent'/><text x='122' y='134' text-anchor='middle' class='t-mono t-accent'>9</text><text x='260' y='134' class='t-sm t-muted'>lower_bound finds 10 — 9 replaces it</text><text x='20' y='192' class='t-sm t-mono'>x=2</text><rect x='100' y='164' width='44' height='44' class='f-accent-soft s-accent'/><text x='122' y='192' text-anchor='middle' class='t-mono t-accent'>2</text><text x='260' y='192' class='t-sm t-muted'>2 replaces 9 — smallest possible tail</text><text x='20' y='250' class='t-sm t-mono'>x=5</text><rect x='100' y='222' width='44' height='44' class='f-panel s-line'/><text x='122' y='250' text-anchor='middle' class='t-mono'>2</text><rect x='146' y='222' width='44' height='44' class='f-accent-soft s-accent'/><text x='168' y='250' text-anchor='middle' class='t-mono t-accent'>5</text><text x='260' y='250' class='t-sm t-muted'>5 beats every tail — append, length 2</text><text x='20' y='308' class='t-sm t-mono'>x=3</text><rect x='100' y='280' width='44' height='44' class='f-panel s-line'/><text x='122' y='308' text-anchor='middle' class='t-mono'>2</text><rect x='146' y='280' width='44' height='44' class='f-accent-soft s-accent'/><text x='168' y='308' text-anchor='middle' class='t-mono t-accent'>3</text><text x='260' y='308' class='t-sm t-muted'>3 replaces 5 — future extensions easier</text><text x='20' y='366' class='t-sm t-mono'>x=7</text><rect x='100' y='338' width='44' height='44' class='f-panel s-line'/><text x='122' y='366' text-anchor='middle' class='t-mono'>2</text><rect x='146' y='338' width='44' height='44' class='f-panel s-line'/><text x='168' y='366' text-anchor='middle' class='t-mono'>3</text><rect x='192' y='338' width='44' height='44' class='f-accent-soft s-accent'/><text x='214' y='366' text-anchor='middle' class='t-mono t-accent'>7</text><text x='260' y='366' class='t-sm t-muted'>append — LIS length = 3</text></svg>"
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "tag": "m15",
+  "week": "Week 8 · Module 15",
+  "title": "Timed OA & CCAT Strategy",
+  "priority": "meta",
+  "summary": "Modules 01–14 built your toolkit; this capstone teaches you to spend it under a clock. Mock-OA rituals, partial-credit strategy, bug-proofing habits, and the exact playbooks for Microsoft (Codility), Flipkart (GRiD), and Trilogy's CCAT.",
+  "notes": [
+    {
+      "heading": "The real bottleneck (it isn't knowledge)",
+      "body": "Modules 01–14 built your *toolkit*. This module is about a different skill entirely: **using that toolkit fast, correctly, on the first try, while a clock runs and a scoreboard watches**. Solving a problem with unlimited time and solving it inside an OA window are as different as jogging and racing — and the OA only grades the race.\n\nHere is the honest diagnosis. You are *not* weak at DSA. You build real things, you are a Codeforces pupil/specialist, and your arrays, hashing, stacks, and trees are genuinely solid. What actually costs you points is **executing a correct solution quickly under time pressure**, especially in the topics you have not drilled: graphs, binary-search-on-answer, heaps, harder DP and backtracking. An OA gives exactly zero credit for \"I would have gotten it with 20 more minutes.\"\n\n> [!KEY]\n> Reframe the goal for these final weeks: not *learn more*, but **convert what you already know into fast, bug-free, tested submissions**. Speed and reliability are the deliverable — knowledge is just the raw material.\n\n> [!NOTE]\n> Everything in this module is meta-strategy: there is no new algorithm here. That is exactly why people skip it — and then donate a third of their OA score to pacing mistakes and untested edge cases that one week of drilling would have prevented."
+    },
+    {
+      "heading": "The weekly mock ritual",
+      "body": "The single highest-value habit before any OA season: **one full timed set per week**, plus a couple of short drills. A full set means **3 problems, 90 minutes, hard stop, no pausing, no looking anything up**. That last constraint is the whole point — the moment you allow yourself a peek at a hint, you are no longer measuring the thing the OA measures.\n\nYour weekly template (pick a fixed day and time so it becomes a ritual):\n\n| Session | What | Why |\n|---|---|---|\n| 1× full mock | 3 problems, 90 min, hard stop | your \"real OA\" |\n| 2–3× short drills | 1 medium in 25 min, or 2 easies in 25 min | builds the solve-fast-and-move reflex |\n| 1× review | re-solve every failure *from scratch* | repeat until it is automatic |\n\nWhere the sets come from:\n\n- **LeetCode Weekly & Biweekly contests** — the closest thing to a real OA: four fresh problems, 90 minutes, live ranking. Do them live when you can.\n- **LeetCode virtual contests** — run any past contest as a timed session on your own schedule. An infinite supply of realistic mocks.\n- **Company mocks** — LeetCode's company-tagged lists (Microsoft, Flipkart, …) as timed blocks, plus HackerRank and Codility sample tests, so the *interface* is never a surprise on test day.\n\nOn the clock itself, budget before you code:\n\n[[fig:m15-mock-timeline]]\n\n- Spend the **first 3–5 minutes scanning all three problems** and ranking them by difficulty. Never just start at #1.\n- **Easiest first, always.** Bank a guaranteed solve in ~15–20 minutes.\n- Medium next (~30–35 min), hard last with whatever remains. Rough split: **20 / 35 / 35** — adjust as you read.\n\n> [!EXAM] The skip-and-return rule\n> If you are **10+ minutes into a problem with no clear path**, stop. Submit any partial you have and move to the next problem. A fresh problem you can fully solve is worth strictly more than a stuck one you might crack. Come back only if time remains.\n\n> [!ANALOGY]\n> Mocks are fire drills. Nobody reads the evacuation manual during an actual fire — you drill the route until your legs know it. Test-day nerves cannot rattle a routine you have already run eight times."
+    },
+    {
+      "heading": "Partial scoring: brute force first, optimize second",
+      "body": "Codility and HackerRank score each submission against **many hidden test groups** and award **partial credit** per group: small \"correctness\" groups and large \"performance\" groups. That changes the optimal play completely:\n\n1. **Brute force first.** Write the obviously-correct $O(n^2)$ (or worse) solution and **submit it immediately**. It passes the correctness groups and locks in real points.\n2. **Then optimize.** Improve to the target complexity to capture the performance groups.\n3. You are now never at zero on a problem, and the clock is de-risked: run out of time mid-optimization and you *keep* the brute-force points.\n\n[[fig:m15-partial-credit]]\n\n> [!EXAM]\n> On Codility, a submitted correct-but-slow solution is often worth 40–60% of the problem. An unsubmitted elegant solution is worth exactly 0%. Submit early, submit often.\n\n> [!WARNING] Flipkart inverts this\n> On Flipkart-style tests, scoring is much closer to **all-or-nothing per problem**. There, a fully correct solution to fewer problems beats partials sprayed across all three — see the company playbooks below. Know which scoring regime you are in *before* the test starts."
+    },
+    {
+      "heading": "Bug-proofing: test-first habits under the clock",
+      "body": "Most points lost in an OA are lost to *bugs*, not to missing algorithms. You cannot debug your way out of a 90-minute window, so build reflexes that catch bugs before the judge does.\n\n**Sanity-test before every submit:**\n\n- Run the **provided samples** first, obviously.\n- Then hand-run **2–3 tiny cases of your own**, typed directly.\n- Add one **known-answer case you computed by hand**, so you are not just trusting the sample.\n\n**The edge-case checklist** — run it mentally on every problem:\n\n- **Empty input**: `n == 0`, empty string, empty array.\n- **Single element**: `n == 1` — loops and two-pointer logic love to break here.\n- **Duplicates / all-equal** values.\n- **Overflow** — the #1 silent killer (see the pitfall below).\n- **Boundaries**: max constraints ($n = 10^5$, values up to $10^9$), negatives, min/max ints.\n- **Sorted / reverse-sorted / already-the-answer** inputs.\n\n> [!PITFALL] Overflow is the #1 silent killer\n> The sum of $10^5$ ints each up to $10^9$ is $10^{14}$ — far past `int`'s $\\approx 2.1 \\times 10^9$. **Default to `long long`** for sums, products, prefix sums, and anything near $10^9$. This one habit will save you entire failed test groups.\n\nPaste this at the top of every OA solution:\n\n```cpp\n#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // ... solve\n    return 0;\n}\n```\n\nWithout `sync_with_stdio(false); cin.tie(nullptr);`, reading $10^5$–$10^6$ lines with `cin` can TLE **purely on I/O**. And use `'\\n'` instead of `endl` inside loops — `endl` flushes the stream on every single call.\n\n**Avoiding TLE — read the constraints first.** They tell you the target complexity before you write a line:\n\n[[fig:m15-constraints-map]]\n\n> [!PITFALL] Accidental $O(n^2)$\n> Watch for: repeated `string +=` in a loop, `.find()` inside a loop, erasing from the middle of a `vector`, and passing big containers **by value** (pass by `const&`). Prefer `vector` + `reserve` over repeated reallocation; `unordered_map` gives $O(1)$ lookups but carries a real constant factor."
+    },
+    {
+      "heading": "Company playbooks: Microsoft, Flipkart, Trilogy",
+      "body": "**Microsoft (Codility).** Problem style leans **LeetCode-medium**, with a real emphasis on **graphs and DP** — exactly your two biggest gaps, so weight your prep toward modules 10–13. Get familiar with Codility's editor and its test-group partial scoring: the brute-force-first play applies directly. Later rounds are live and interview-style, so **verbalize your approach before coding** — state the idea, the complexity, and the edge cases out loud. Interviewers score your *reasoning*, not just the green checkmark; practice narrating while you solve so it feels natural.\n\n**Flipkart (GRiD / SDE).** The format is brutal by design: **3 hard problems in 90 minutes**, and most strong candidates do *not* full-clear it. Scoring rewards **completely correct** solutions, so read all three in the first 5 minutes, identify the 1–2 most in your wheelhouse (likely greedy / implementation / DP given your strengths), and drive them to 100% instead of spraying partial attempts. Correctness and edge cases over cleverness — this is where the module 11–13 work pays off.\n\n**Trilogy Innovations.** Two separate things, and **both** gate you:\n\n1. **The coding assessment** — hard, **matrix / grid / DP-heavy** problems: heavy 2D DP, grid traversal, simulation. Modules 11–13 are the prep.\n2. **The CCAT (Criteria Cognitive Aptitude Test)** — a separate **15-minute, 50-question** aptitude test mixing math, logic, verbal, and spatial reasoning. It is not a coding test, and being a strong coder does **not** carry over automatically.\n\n[[fig:m15-ccat-pacing]]\n\n> [!EXAM] The CCAT bar\n> 50 questions in 15 minutes is **~18 seconds per question**. Almost nobody finishes; the score is the raw number correct. Trilogy filters aggressively — **aim for ~45/50** and do not treat it as a formality.\n\nHow to prep the CCAT (timed sets — no paid sites needed, standard aptitude material covers all of it):\n\n- **Fast mental math**: percentages, ratios, fractions, averages, simple/compound interest, unit conversions, number series — practiced *without* a calculator.\n- **Logical / verbal reasoning**: syllogisms, if-then deductions, word analogies, odd-one-out, sentence logic.\n- **Spatial reasoning**: shape rotation, folding/unfolding, pattern completion, 2D/3D visualization.\n- **The meta-skill**: answer easy ones instantly, flag hard ones, never burn 40 seconds on a single question. Take full 15-min / 50-question mocks until the pace is muscle memory."
+    },
+    {
+      "heading": "The 8-week map and the mindset",
+      "body": "Here is the whole plan at a realistic **1–2 hr/day**, front-loading your gaps and ending in pure simulation:\n\n| Week | Focus | Your status |\n|---|---|---|\n| 1 | Arrays & hashing, two pointers / sliding window | strength — speed warm-up, easies in under 15 min |\n| 2 | **Binary search** (classic + on-answer), stacks | BS is a core gap — spend real time here |\n| 3 | **Linked lists**, recursion & **backtracking** | gaps — build them clean from scratch |\n| 4 | Trees & BST, tries | strength — go fast, reinforce the win |\n| 5 | **Heaps**, intro **graphs** (BFS/DFS, adjacency lists) | big gaps — learn `priority_queue` cold |\n| 6 | **Union-Find, topological sort, Dijkstra** | the biggest gap — most time of any week |\n| 7 | **Advanced DP** (knapsack, LCS, edit distance, intervals), greedy | beyond your current 1D/2D counting |\n| 8 | **Full timed simulation** — this module | 3–4 full mocks + daily CCAT sets if targeting Trilogy |\n\nTight on time? Compress weeks 1–2 and 4 (your strengths) and reinvest in weeks 5–7 — graphs, heaps, and advanced DP are where your points are currently being left on the table.\n\n> [!KEY] Mindset\n> **OA speed is a trainable muscle, not a talent.** Every timed set makes the next one faster; the nervousness and the fumbling both fade with reps — guaranteed. And **consistency beats intensity**: one focused set a week for eight weeks transforms you far more than one heroic 10-hour cram. Show up daily, even for 45 minutes.\n\n> [!NOTE]\n> The gaps you have — graphs, binary search, heaps, DP — are the most *learnable* topics in DSA precisely because they are pattern-based. Drill the pattern once and it is yours for every future problem. You've got this."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Run a live LeetCode Weekly/Biweekly contest",
+      "url": "https://leetcode.com/contest/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The closest thing to a real OA: 4 fresh problems, 90 min, live ranking — do one live whenever the schedule allows."
+    },
+    {
+      "name": "Run a LeetCode virtual contest (weekly, timed)",
+      "url": "https://leetcode.com/contest/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Any past contest as a 90-min hard-stop mock — infinite supply; no pausing, no looking things up."
+    },
+    {
+      "name": "Timed company-tagged set (Microsoft / Flipkart)",
+      "url": "https://leetcode.com/problemset/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Filter by company tag, pick 3 problems, run as one 90-min block — practice the 20/35/35 budget and the skip-and-return rule."
+    },
+    {
+      "name": "Codility sample test (Microsoft's platform)",
+      "url": "https://app.codility.com/demo/take-sample-test/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Learn the editor and the test-group partial scoring before test day — run the brute-force-first play here."
+    },
+    {
+      "name": "HackerRank practice test (interface familiarity)",
+      "url": "https://www.hackerrank.com/skills-verification",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Timed certification-style tests in HackerRank's real assessment UI — the interface should never be a surprise on test day."
+    },
+    {
+      "name": "Short drill: 1 medium in 25 minutes",
+      "url": "https://leetcode.com/problemset/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "2–3 of these per week build the solve-fast-and-move reflex; pair with one review session re-solving every failure from scratch."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**The Codility opening move** — You open a Microsoft OA on Codility: two medium problems, 70 minutes, test-group partial scoring. Problem 1: count the pairs $(i, j)$, $i < j$, with $a_i + a_j = k$, where $n \\le 10^5$ and values reach $10^9$. Script your first 30 minutes: what do you write, and *when* do you submit?",
+      "tag": "strategy",
+      "answer": "**Minutes 0–4: scan both problems.** Read both fully and rank them before touching the keyboard. Suppose problem 1 is the pair-counting task — a module-01 pattern, so it goes first.\n\n**Minutes 4–15: brute force, then SUBMIT.** The naive double loop is obviously correct, and on Codility that correctness is worth real points *right now*:\n\n```cpp\n#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n; long long k;\n    cin >> n >> k;\n    vector<long long> a(n);\n    for (auto &x : a) cin >> x;\n\n    long long cnt = 0;                  // counts can exceed int\n    for (int i = 0; i < n; i++)\n        for (int j = i + 1; j < n; j++)\n            if (a[i] + a[j] == k) cnt++;\n\n    cout << cnt << '\\n';\n    return 0;\n}\n```\n\nThis is $O(n^2)$ — at $n = 10^5$ that is $10^{10}$ operations, so the performance groups will TLE. But the correctness groups pass, and roughly half the problem's points are banked before minute 15.\n\n[[fig:m15-partial-credit]]\n\n> [!INTUITION]\n> The brute-force submission is your **floor**; the optimized one is your **ceiling**. Locking the floor first means the clock can no longer zero you out on this problem.\n\n**Minutes 15–30: optimize and resubmit.** The hash-map complement count replaces the inner loop:\n\n```cpp\nunordered_map<long long, long long> seen;\nlong long cnt = 0;\nfor (int i = 0; i < n; i++) {\n    auto it = seen.find(k - a[i]);\n    if (it != seen.end()) cnt += it->second;\n    seen[a[i]]++;\n}\ncout << cnt << '\\n';\n```\n\n$O(n)$ time, $O(n)$ space. Before resubmitting, run the edge checklist: `n == 1` (answer 0), all-equal array with `k` equal to twice the value (counts pairs, not indices twice), negatives, and overflow — two values near $10^9$ sum past `int`, which is why *everything* is `long long`.\n\n**What generalizes:** on any partial-credit platform, the sequence is always *scan → brute force → submit → optimize → resubmit*, with the edge-case checklist run before each submit."
+    },
+    {
+      "q": "**The Flipkart 5-minute triage** — Flipkart GRiD: 3 hard problems, 90 minutes, scoring close to all-or-nothing per problem. Most strong candidates do not full-clear this set. Design your first 5 minutes and the structure of the remaining 85.",
+      "tag": "triage",
+      "answer": "**Why the Codility play fails here.** With all-or-nothing scoring, three half-finished solutions score close to zero. The winning strategy inverts: **fully correct on 1–2 problems beats partials on all 3**.\n\n**Minutes 0–5: read all three, no code.** For each problem, name the pattern (DP? greedy? graph? simulation?) and ask one question: *can I see the full solution path end to end?* Rank by that, not by which is listed first. Given your strengths, the greedy / implementation / DP problem is the likely pick.\n\n[[fig:m15-mock-timeline]]\n\n**Minutes 5–50: lock down problem A to 100%.** Start from the standard skeleton:\n\n```cpp\n#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // ... solve\n    return 0;\n}\n```\n\nThen: state the algorithm and its complexity to yourself *before* coding (hard problems here typically need $O(n \\log n)$ or a polynomial DP — check the constraints against the complexity map). Code it, run the samples, then your own tiny cases: `n == 1`, all-equal, boundary values, and a hand-computed known answer. Only submit when you would bet the round on it.\n\n**Minutes 50–85: attack problem B** with the same discipline. **Final 5 minutes:** re-check A and B rather than opening C — a last-minute half-attempt at C is worth nothing under this scoring.\n\n> [!EXAM]\n> Skip-and-return still applies *inside* the chosen problems: 10+ minutes with no path forward on B means re-verifying A and salvaging whatever B progress is real, not heroically staring.\n\n> [!KEY]\n> Depth beats breadth whenever scoring is binary. Decide your 1–2 targets in the first 5 minutes and spend the other 85 making them bulletproof."
+    },
+    {
+      "q": "**The CCAT 15-minute sprint** — Trilogy's CCAT: 50 questions in 15 minutes across math, logic, verbal, and spatial reasoning; the score is the raw number correct and the working bar is ~45/50. Design the in-test pacing policy and the two-week prep plan.",
+      "tag": "aptitude",
+      "answer": "**The arithmetic first.** $15 \\times 60 / 50 = 18$ seconds per question. Almost nobody finishes all 50, and there is no partial credit per question — so the whole game is *throughput*: maximize the number of questions you answer correctly, not the elegance of any one answer.\n\n[[fig:m15-ccat-pacing]]\n\n**In-test policy — three passes:**\n\n1. **Pass 1 (the sprint):** answer everything you can settle in ~15 seconds. Mental math, easy analogies, obvious series. Flag anything that smells like a 40-second grind and move — instantly, without guilt.\n2. **Pass 2 (the flagged ones):** return with whatever time remains; these are now worth attempting because the cheap points are already banked.\n3. **Final seconds:** the score is raw correct with no penalty, so a blank is never better than a fast guess — fill in anything still open.\n\n> [!PITFALL]\n> The classic failure mode is spending 60 seconds proving you *can* do question 7 while questions 30–50 go unseen. Three easy questions un-attempted cost more than one hard question skipped.\n\n**Two-week prep plan (daily, alongside week-8 mocks):**\n\n- **Fast mental math** drills: percentages, ratios, fractions, averages, simple/compound interest, unit conversions, number series — all *without* a calculator, against a timer.\n- **Logical / verbal**: syllogisms, if-then deductions, word analogies, odd-one-out, sentence logic.\n- **Spatial**: shape rotation, folding/unfolding, pattern completion.\n- **One full 15-min / 50-question mock per day.** The mock *is* the skill: the 18-second rhythm has to become muscle memory, exactly like the 90-minute coding mock. Standard free aptitude material covers everything — no paid sites needed.\n\n> [!KEY]\n> Treat the CCAT as a first-class gate, not a formality. Trilogy filters aggressively on it, and coding skill does not transfer automatically — but the pacing skill trains in two weeks of honest timed mocks."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA problem states $n \\le 10^5$ with values up to $10^9$. Your first idea is a double loop over all pairs. What should you conclude *before* writing any code?",
+      "options": [
+        "$O(n^2)$ is fine — $10^{10}$ simple operations run in about a second",
+        "The target is $O(n \\log n)$ or $O(n)$ — a double loop at $10^{10}$ operations will TLE the performance groups",
+        "The target must be $O(\\log n)$, so only binary search can work",
+        "Constraints say nothing about complexity; just code the idea and see"
+      ],
+      "answer": 1,
+      "explanation": "Constraints are a complexity contract: $n \\le 10^5$ means roughly $O(n \\log n)$ or $O(n)$ for full marks, because $n^2 = 10^{10}$ operations is far beyond the ~$10^8$/sec budget. Option C over-corrects — $O(\\log n)$ is the target when $n$ reaches $10^9$-scale, not $10^5$. And on a partial-credit platform the $O(n^2)$ version is still worth *submitting* — just not worth *stopping* at.",
+      "tag": "constraints"
+    },
+    {
+      "q": "Codility test, 35 minutes left on a problem. You have a fully working $O(n^2)$ solution in the editor and a clear idea for the $O(n \\log n)$ version. What is the best move?",
+      "options": [
+        "Submit the $O(n^2)$ version now, then start on the optimized one",
+        "Skip submitting the slow version — it wastes a submission and looks bad",
+        "Move to the next problem; a slow solution is as good as no solution",
+        "Keep hand-testing the brute force for another 10 minutes before deciding"
+      ],
+      "answer": 0,
+      "explanation": "Codility awards partial credit per test group, so a correct-but-slow submission immediately banks the correctness groups (often 40–60% of the problem) and de-risks the clock: if the optimization goes wrong, you keep those points. Option B/C treat the test like all-or-nothing scoring — that logic belongs to Flipkart-style tests, not Codility.",
+      "tag": "partial-credit"
+    },
+    {
+      "q": "Your solution reads $10^6$ integers with `cin` and prints $10^6$ lines using `endl`. The algorithm is a clean $O(n)$ pass, yet the judge reports TLE. What is the most likely fix?",
+      "options": [
+        "The algorithm secretly needs to be $O(\\log n)$ — rethink the approach",
+        "Call `reserve` on the vector to avoid reallocation",
+        "Replace `unordered_map` with `map` for more predictable performance",
+        "Add `sync_with_stdio(false); cin.tie(nullptr);` and print `'\\n'` instead of `endl`"
+      ],
+      "answer": 3,
+      "explanation": "With a million lines, I/O itself is the bottleneck: synced `cin` is slow, and `endl` flushes the output stream on every call. The fast-I/O pair plus `'\\n'` fixes both. Option A ignores that $O(n)$ is already the right complexity; B and C shave constants that are dwarfed by a million flushes.",
+      "tag": "fast-io"
+    },
+    {
+      "q": "You compute `int sum = 0; for (int x : a) sum += x;` where $n = 10^5$ and each element can be $10^9$. What actually happens?",
+      "options": [
+        "It works — `int` comfortably holds the result",
+        "It only breaks if the array contains negative numbers",
+        "Silent overflow — the sum can reach $10^{14}$, far past `int`'s ~$2.1 \\times 10^9$; use `long long`",
+        "The compiler automatically promotes the accumulation to 64-bit"
+      ],
+      "answer": 2,
+      "explanation": "The maximum sum is $10^5 \\times 10^9 = 10^{14}$, while `int` tops out near $2.1 \\times 10^9$. Overflow is undefined behavior and usually *silent* — samples pass, big hidden groups fail. C++ never auto-promotes an `int` accumulator, and negatives are irrelevant to the failure. Defaulting to `long long` for sums and prefix sums is the cheapest insurance in OA coding.",
+      "tag": "overflow"
+    },
+    {
+      "q": "You are 12 minutes into problem 2 of a 3-problem, 90-minute set with no clear path, though a partial brute force is written. Per this module's rule, what do you do?",
+      "options": [
+        "Submit the partial you have and move to the next problem, returning only if time remains",
+        "Push through — switching problems wastes the context you've built",
+        "Delete the brute force and restart the problem with a clean head",
+        "Give it exactly 5 more minutes, then decide again"
+      ],
+      "answer": 0,
+      "explanation": "The skip-and-return rule triggers at 10+ minutes with no clear path: bank any partial credit, then spend the time on a fresh problem you can fully solve — that is worth strictly more than continued staring. Option B is the sunk-cost trap that ruins OA scores, and D just re-arms the same trap with a new timer.",
+      "tag": "triage"
+    },
+    {
+      "q": "Flipkart GRiD: 3 hard problems, 90 minutes, scoring close to all-or-nothing per problem. Which plan matches how the test is actually scored?",
+      "options": [
+        "Submit quick brute-force partials on all three, then improve round-robin",
+        "Split time evenly: 30 minutes per problem, in the given order",
+        "Start with the hardest while your mind is freshest",
+        "Read all three in the first 5 minutes, pick the 1–2 most in your wheelhouse, and drive them to fully correct"
+      ],
+      "answer": 3,
+      "explanation": "When scoring is all-or-nothing, three half-solutions are worth roughly nothing — full-solve beats partial, so you concentrate on the problems you can actually finish. Option A is the *Codility* strategy applied to the wrong scoring regime; B and C ignore that problem selection, not raw effort, is what the first five minutes are for.",
+      "tag": "flipkart"
+    },
+    {
+      "q": "CCAT: 50 questions, 15 minutes, score is the raw number correct. Question 7 looks solvable but smells like a 60-second grind. The right move?",
+      "options": [
+        "Spend the 60 seconds — accuracy is what gets you to 45/50",
+        "Flag it and skip immediately — protecting the ~18 s/question pace wins more total points",
+        "Slow the whole test down; careful beats fast when only correct answers count",
+        "Skip it and every later question that even looks hard, permanently"
+      ],
+      "answer": 1,
+      "explanation": "At ~18 seconds per question, one 60-second grind silently costs you three easier questions you never reach — pace *is* the score. Option A optimizes one question at the expense of the total; C misreads \"raw correct\" as rewarding slowness when it actually rewards throughput; D throws away flagged questions you could win on a second pass with leftover time.",
+      "tag": "ccat"
+    }
+  ],
+  "figures": {
+    "m15-mock-timeline": {
+      "caption": "The 90-minute budget for a 3-problem set: a short scan, then easiest → medium → hard, roughly **20 / 35 / 35**. Rank first; never just start at #1.",
+      "svg": "<svg viewBox=\"0 0 660 180\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Time budget for a 90 minute three problem OA\"><text x=\"20\" y=\"24\" class=\"t-bold\">90 minutes, 3 problems — budget before you code</text><text x=\"37\" y=\"52\" text-anchor=\"middle\" class=\"t-sm t-muted\">scan</text><rect x=\"20\" y=\"60\" width=\"34\" height=\"40\" class=\"f-warn-soft s-line\"/><rect x=\"54\" y=\"60\" width=\"124\" height=\"40\" class=\"f-ok-soft s-ok\"/><text x=\"116\" y=\"85\" text-anchor=\"middle\" class=\"t-sm t-ok\">easy ~18m</text><rect x=\"178\" y=\"60\" width=\"220\" height=\"40\" class=\"f-accent-soft s-accent\"/><text x=\"288\" y=\"85\" text-anchor=\"middle\" class=\"t-sm t-accent\">medium ~32m</text><rect x=\"398\" y=\"60\" width=\"242\" height=\"40\" class=\"f-panel2 s-line\"/><text x=\"519\" y=\"85\" text-anchor=\"middle\" class=\"t-sm\">hard ~35m</text><text x=\"20\" y=\"125\" class=\"t-sm t-muted t-mono\">0</text><text x=\"54\" y=\"125\" text-anchor=\"middle\" class=\"t-sm t-muted t-mono\">5</text><text x=\"178\" y=\"125\" text-anchor=\"middle\" class=\"t-sm t-muted t-mono\">23</text><text x=\"398\" y=\"125\" text-anchor=\"middle\" class=\"t-sm t-muted t-mono\">55</text><text x=\"640\" y=\"125\" text-anchor=\"end\" class=\"t-sm t-muted t-mono\">90 min</text><text x=\"20\" y=\"156\" class=\"t-sm t-muted\">Easiest first — bank a guaranteed solve. 10+ min stuck with no path? Skip and return.</text></svg>"
+    },
+    "m15-partial-credit": {
+      "caption": "Codility/HackerRank grade per **test group**. Submitting the brute force early locks the correctness groups (**a real score banked**); the optimized resubmission then captures the performance groups.",
+      "svg": "<svg viewBox=\"0 0 660 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Partial credit scoring: brute force submission passes correctness groups, optimized submission passes all groups\"><text x=\"20\" y=\"24\" class=\"t-bold\">Test-group scoring: two submissions, points locked early</text><text x=\"20\" y=\"58\" class=\"t-sm t-bold\">Submit #1 — brute O(n²)</text><rect x=\"20\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"45\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C1</text><rect x=\"78\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"103\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C2</text><rect x=\"136\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"161\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C3</text><rect x=\"194\" y=\"72\" width=\"50\" height=\"32\" class=\"f-bad-soft s-bad\"/><text x=\"219\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono t-bad\">P1</text><rect x=\"252\" y=\"72\" width=\"50\" height=\"32\" class=\"f-bad-soft s-bad\"/><text x=\"277\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono t-bad\">P2</text><text x=\"20\" y=\"126\" class=\"t-sm t-muted\">correctness pass · performance TLE</text><text x=\"20\" y=\"152\" class=\"t-ok t-bold\">≈ 55% banked</text><line x1=\"314\" y1=\"88\" x2=\"350\" y2=\"88\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"360\" y=\"58\" class=\"t-sm t-bold\">Submit #2 — optimized O(n log n)</text><rect x=\"360\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"385\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C1</text><rect x=\"418\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"443\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C2</text><rect x=\"476\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"501\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">C3</text><rect x=\"534\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"559\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">P1</text><rect x=\"592\" y=\"72\" width=\"50\" height=\"32\" class=\"f-ok-soft s-ok\"/><text x=\"617\" y=\"93\" text-anchor=\"middle\" class=\"t-sm t-mono\">P2</text><text x=\"360\" y=\"126\" class=\"t-sm t-muted\">all groups pass</text><text x=\"360\" y=\"152\" class=\"t-ok t-bold\">100%</text><text x=\"20\" y=\"196\" class=\"t-sm t-muted\">Run out of time mid-optimization? You still keep the brute-force points.</text></svg>"
+    },
+    "m15-constraints-map": {
+      "caption": "The constraints → complexity dictionary. Read $n$'s bound **before coding** — it names the algorithm class the setters expect.",
+      "svg": "<svg viewBox=\"0 0 660 230\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Mapping input size constraints to the required time complexity\"><text x=\"20\" y=\"24\" class=\"t-bold\">Read constraints first — they name the target complexity</text><text x=\"20\" y=\"70\" class=\"t-mono\">n ≤ 20</text><line x1=\"175\" y1=\"65\" x2=\"230\" y2=\"65\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"245\" y=\"70\" class=\"t-sm\">exponential OK — backtracking, bitmask</text><text x=\"20\" y=\"110\" class=\"t-mono\">n ≤ 2000</text><line x1=\"175\" y1=\"105\" x2=\"230\" y2=\"105\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"245\" y=\"110\" class=\"t-sm\">O(n²) OK — double loops are fine</text><text x=\"20\" y=\"150\" class=\"t-mono\">n ≤ 1e5</text><line x1=\"175\" y1=\"145\" x2=\"230\" y2=\"145\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"245\" y=\"150\" class=\"t-sm\">O(n log n) or O(n) — sort, hash, heap, two pointers</text><text x=\"20\" y=\"190\" class=\"t-mono\">n up to 1e9</text><line x1=\"175\" y1=\"185\" x2=\"230\" y2=\"185\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"245\" y=\"190\" class=\"t-sm\">O(log n) or math — binary-search-on-answer territory</text></svg>"
+    },
+    "m15-ccat-pacing": {
+      "caption": "CCAT pacing: at ~18 seconds per question, the one **40-second grinder** costs you two or three easy questions you never reach. Flag it, move on, return at the end.",
+      "svg": "<svg viewBox=\"0 0 660 180\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"CCAT pacing of about 18 seconds per question with one slow question flagged for skipping\"><text x=\"20\" y=\"24\" class=\"t-bold\">CCAT: 50 questions / 15 min ≈ 18 s each</text><rect x=\"20\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"42\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">9s</text><rect x=\"66\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"88\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">12s</text><rect x=\"112\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"134\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">8s</text><rect x=\"158\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"180\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">15s</text><rect x=\"204\" y=\"54\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"226\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono t-bad\">40s</text><rect x=\"250\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"272\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">10s</text><rect x=\"296\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"318\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">7s</text><rect x=\"342\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"364\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">13s</text><rect x=\"388\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"410\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">9s</text><rect x=\"434\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"456\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">11s</text><rect x=\"480\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"502\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">16s</text><rect x=\"526\" y=\"54\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"548\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-mono\">8s</text><text x=\"586\" y=\"82\" class=\"t-sm t-muted\">… ×50</text><text x=\"42\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q1</text><text x=\"88\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q2</text><text x=\"134\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q3</text><text x=\"180\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q4</text><text x=\"226\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-bad\">flag</text><text x=\"272\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q6</text><text x=\"318\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q7</text><text x=\"364\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q8</text><text x=\"410\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q9</text><text x=\"456\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q10</text><text x=\"502\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q11</text><text x=\"548\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">Q12</text><text x=\"20\" y=\"152\" class=\"t-sm t-muted\">Never burn 40 s on one question: flag it, move on, return at the end. Target ≈ 45/50.</text></svg>"
+    }
+  }
+}

@@ -1,0 +1,269 @@
+{
+  "tag": "m06",
+  "week": "Week 3 · Module 06",
+  "title": "Trees & BST",
+  "priority": "review",
+  "summary": "Trees are your strength — this module converts that comfort into OA speed. One idea carries almost everything: most tree problems are a single DFS where every node returns a small packet of info to its parent. Learn to see that packet and you solve 80% of tree problems on sight.",
+  "notes": [
+    {
+      "heading": "Spotting the tree pattern in 20 seconds",
+      "body": "You're already comfortable with trees, so this module isn't about learning them — it's about *recognition speed*. The goal: read a statement and know, within 20 seconds, which of exactly **two engines** to start typing.\n\nReach for this module when:\n\n- The input is a **binary tree / BST** (`TreeNode*`), or something implicitly tree-shaped: parent pointers, nested or hierarchical structure.\n- The question is about **paths, depth, diameter, subtree properties, ancestors,** or **level-by-level** aggregation.\n\nThe statement's *phrasing* usually names the engine for you:\n\n| Phrase in the statement | Engine to reach for |\n|---|---|\n| \"deepest / longest / kth / lowest common…\", \"is this valid / balanced / symmetric…\", \"for each node compute…\" | one recursive **DFS** |\n| \"level order\", \"row by row\", \"zigzag\", \"right side view\" | **BFS** with a queue |\n| \"BST\" anywhere in the statement | exploit sorted inorder or the `left < root < right` invariant |\n\n> [!EXAM] Microsoft loves trees\n> Trees are a STAR topic on Codility-style screens. A tree medium is often the *fastest* medium on the paper — if you recognize the pattern instantly, you bank ten minutes to spend on the harder question.\n\n> [!KEY]\n> Most tree problems are **one DFS where every node returns a small packet of info to its parent**. The whole skill is learning to name that packet before you write a line of code."
+    },
+    {
+      "heading": "Engine 1 — DFS and the three orders",
+      "body": "Pre-order, in-order and post-order are not three algorithms. They are **one recursion** that differs only in *when* you touch the current node relative to its two child calls:\n\n```cpp\nstruct TreeNode {\n    int val;\n    TreeNode *left, *right;\n    TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}\n};\n\n// ---------- DFS traversals: order = WHEN you visit `node` ----------\nvoid dfs(TreeNode* node, vector<int>& out) {\n    if (!node) return;\n    // out.push_back(node->val);   // PRE-order:  node, left, right\n    dfs(node->left, out);\n    // out.push_back(node->val);   // IN-order:   left, node, right  (BST -> sorted!)\n    dfs(node->right, out);\n    // out.push_back(node->val);   // POST-order: left, right, node  (children before parent)\n}\n```\n\n[[fig:m06-traversal-orders]]\n\nEach order has a *personality* — knowing which to grab is half the problem:\n\n- **Pre-order** touches the node before its children → good when the parent decides something the children need (serialization, copying a tree, passing bounds down).\n- **In-order** on a **BST** visits values in sorted order → \"kth smallest\", \"validate\", \"find pair\" all fall out of this one fact.\n- **Post-order** touches the node after both children → the natural home of the packet pattern, because you can only combine children's answers *after* you have them.\n\n> [!INTUITION]\n> Ask yourself: \"do I need my children's answers before I can act?\" If yes, you're writing post-order whether you call it that or not. Height, balance, diameter, LCA — all post-order at heart.\n\n> [!NOTE]\n> The base case `if (!node) return;` is the first line of nearly every tree function. It quietly handles leaves (their children are `nullptr`) *and* the empty tree, so you almost never need special leaf handling."
+    },
+    {
+      "heading": "THE pattern — return a packet up, report to a global",
+      "body": "Here is the single most reused tree idea in interviews. Each recursive call returns a **compact packet** summarizing its subtree; the parent combines the two children's packets. Sometimes the final answer isn't the thing you return — then you also keep a **global** that you update as you pass through each node.\n\nThe canonical example is diameter: return *height*, report *bent paths*:\n\n```cpp\n// ---------- THE pattern: return info up the recursion ----------\n// Example packet: height of subtree, while updating a global answer (diameter).\nint best = 0;\nint height(TreeNode* node) {\n    if (!node) return 0;                 // base case: empty subtree\n    int L = height(node->left);          // ask left child for its info\n    int R = height(node->right);         // ask right child for its info\n    best = max(best, L + R);             // combine here: path through THIS node\n    return 1 + max(L, R);                // return MY info to my parent\n}\n```\n\n[[fig:m06-report-return]]\n\n> [!ANALOGY]\n> Think of a company org chart. Each manager asks their two reports: \"how deep is your team?\" A manager can *tell their own boss* only one straight chain (their taller side plus themselves). But the interesting fact — \"the longest chain of communication *bends* at me, going down one side and up the other\" — can't be passed upward as-is. So the manager files it in a shared record (`best`) instead.\n\nRun the **mental checklist** before writing any tree DFS:\n\n1. What is the **base case** (usually `nullptr` → return the identity value)?\n2. What **packet** does each subtree return to its parent?\n3. How do I **combine** the two children's packets?\n4. Is the answer I **return** the same as the answer I **report** — or do I need a global?\n\n> [!KEY] Return vs. report\n> Question 4 is the separator. *Height*: return == report, no global needed. *Diameter / max path sum*: the best answer **bends** at some node, and a bent path can't be extended upward — so you report it to a global and return only the straight, extendable arm `1 + max(L, R)`.\n\n> [!EXAMPLE]\n> Tree `4 — 2 — 5` under root `1` (node 2 has children 4 and 5). At node 2: `L = 1`, `R = 1`. Report `best = max(best, 1+1) = 2` (path 4→2→5 bends here). Return `1 + max(1,1) = 2` to node 1 — the straight arm 4→2 (or 5→2) that node 1 *can* extend."
+    },
+    {
+      "heading": "Engine 2 — BFS, one level at a time",
+      "body": "Anything phrased by *levels* — \"level order\", \"row by row\", \"zigzag\", \"right side view\", \"average per level\" — is a queue, not recursion. The whole template is this, and the load-bearing line is the **size freeze**:\n\n```cpp\n// ---------- BFS: level-order with a queue ----------\nvector<vector<int>> levelOrder(TreeNode* root) {\n    vector<vector<int>> res;\n    if (!root) return res;\n    queue<TreeNode*> q;\n    q.push(root);\n    while (!q.empty()) {\n        int sz = q.size();               // freeze count: exactly this level\n        vector<int> level;\n        for (int i = 0; i < sz; ++i) {\n            TreeNode* cur = q.front(); q.pop();\n            level.push_back(cur->val);\n            if (cur->left)  q.push(cur->left);\n            if (cur->right) q.push(cur->right);\n        }\n        res.push_back(move(level));\n    }\n    return res;\n}\n```\n\n[[fig:m06-bfs-levels]]\n\nWhy the freeze works: when the `while` loop starts an iteration, the queue contains *exactly* the nodes of one level — nothing more, nothing less. Snapshotting `sz` lets you pop exactly those, while their children (the next level) accumulate behind them.\n\n> [!PITFALL]\n> Writing `for (int i = 0; i < q.size(); ++i)` instead of freezing `sz` first is the classic bug: every child you push grows `q.size()` mid-loop, so the loop keeps going and **mixes levels together**. Snapshot first, always.\n\n> [!EXAM]\n> Most level-flavored OA questions are this exact template plus a one-line tweak: *right side view* = keep the last value of each level; *zigzag* = reverse alternate levels; *level averages* = sum/count per level. Memorize the skeleton so the tweak is the only thinking you do."
+    },
+    {
+      "heading": "BSTs — the word itself is the hint",
+      "body": "When a statement says **BST**, that word is planted deliberately. The interviewer wants to see whether you exploit the structure ($O(h)$ or a sorted stream) instead of writing generic tree code ($O(n)$ with no order used). Two facts cover almost every BST problem:\n\n1. **Inorder traversal of a BST is sorted, strictly increasing.** \"Kth smallest\" = inorder, stop at the kth. \"Validate\" = inorder must never step down. \"Two-sum in a BST\" = inorder to a sorted array, then two pointers.\n2. **Every node lives inside an interval `(low, high)` inherited from its ancestors.** Going left tightens the *upper* bound to the node's value; going right tightens the *lower* bound. This is how you validate correctly, and how you binary-search your way down in $O(h)$ (e.g. LCA in a BST: walk down until `p` and `q` split).\n\n[[fig:m06-bst-bounds]]\n\n> [!PITFALL] The local-check trap\n> Checking only `left->val < val < right->val` at each node is the most common wrong answer to Validate BST. It passes trees that are *not* BSTs: root 5 with right child 6, where 6 has left child 3. Every parent-child triple looks fine locally, but 3 sits in 5's **right** subtree, so globally it must be > 5. Only inherited bounds catch this.\n\n> [!WARNING] Integer bounds\n> Node values can be `INT_MIN` / `INT_MAX`, so seed the bounds with `long` (`LONG_MIN`, `LONG_MAX`) — with `int` bounds the comparison false-fails at the extremes. The inorder alternative sidesteps this with a `TreeNode*` \"previous\" pointer instead of a sentinel value."
+    },
+    {
+      "heading": "Pitfalls, and the 20-second narration",
+      "body": "The recurring bugs in tree code are few and well known — check them off consciously:\n\n- **Null checks first.** `if (!node) return <base>;` before touching `node->anything`. Forgetting it is the #1 crash. Also handle `root == nullptr` at the top level.\n- **Edges vs. nodes.** For diameter / path-length problems, decide up front whether the answer counts *nodes* or *edges* and stay consistent (LeetCode's diameter counts **edges**). This off-by-one is the classic silent wrong-answer.\n- **Report-vs-return.** If the best answer can bend at a node, you need a global. Saying this out loud in an interview signals you understand the *pattern*, not just the problem.\n- **BFS level freeze.** `int sz = q.size();` before the inner loop, every time.\n- **Construct-from-traversal:** pass indices/ranges, never sliced vectors — slicing costs $O(n)$ per call and turns the build into $O(n^2)$. A hashmap from value → inorder index gives $O(1)$ splits.\n\n> [!WARNING] Recursion depth\n> A skewed tree gives $O(n)$ stack depth. That's fine at OA sizes, but be ready to *mention* that you could convert to an explicit stack if someone asks about a million-node degenerate tree — the mention is usually all they want.\n\n> [!EXAM] The 20-second narration\n> Best framing under time pressure: *\"I'll do one DFS. Each node returns **[X]** to its parent; I combine the children with **[Y]**; and I track **[global answer]** as I go.\"* Fill in X, Y and the global, and you've essentially written the solution before touching the keyboard — exactly the speed Microsoft and Flipkart OAs reward."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Maximum Depth of Binary Tree",
+      "url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "The \"hello world\" of return-info-up — height in 3 lines."
+    },
+    {
+      "name": "Invert Binary Tree",
+      "url": "https://leetcode.com/problems/invert-binary-tree/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Post-order structural mutation: swap children on the way up."
+    },
+    {
+      "name": "Same Tree",
+      "url": "https://leetcode.com/problems/same-tree/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Parallel recursion over two trees at once."
+    },
+    {
+      "name": "Symmetric Tree",
+      "url": "https://leetcode.com/problems/symmetric-tree/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Mirror recursion: compare (L.left, R.right) and (L.right, R.left)."
+    },
+    {
+      "name": "Balanced Binary Tree",
+      "url": "https://leetcode.com/problems/balanced-binary-tree/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Return height AND balance flag in one pass — the -1 sentinel trick."
+    },
+    {
+      "name": "Binary Tree Level Order Traversal",
+      "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Canonical BFS with the `sz = q.size()` level freeze."
+    },
+    {
+      "name": "Binary Tree Right Side View",
+      "url": "https://leetcode.com/problems/binary-tree-right-side-view/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "BFS, take the last node of each level (or DFS right-first by depth)."
+    },
+    {
+      "name": "Diameter of Binary Tree",
+      "url": "https://leetcode.com/problems/diameter-of-binary-tree/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Global max while returning height — the report-vs-return distinction."
+    },
+    {
+      "name": "Validate Binary Search Tree",
+      "url": "https://leetcode.com/problems/validate-binary-search-tree/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Pass down (min, max) bounds — the classic local-check trap."
+    },
+    {
+      "name": "Lowest Common Ancestor of a Binary Search Tree",
+      "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Exploit BST ordering to walk down without recursion — O(h)."
+    },
+    {
+      "name": "Lowest Common Ancestor of a Binary Tree",
+      "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "General LCA via the post-order \"found-in-subtree\" signal."
+    },
+    {
+      "name": "Kth Smallest Element in a BST",
+      "url": "https://leetcode.com/problems/kth-smallest-element-in-a-bst/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Inorder gives sorted order — stop at the kth."
+    },
+    {
+      "name": "Construct Binary Tree from Preorder and Inorder Traversal",
+      "url": "https://leetcode.com/problems/construct-binary-tree-from-preorder-and-inorder-traversal/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Preorder gives the root; inorder splits left/right — use index ranges, not sliced vectors."
+    },
+    {
+      "name": "Binary Tree Maximum Path Sum",
+      "url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "The boss: global max bent path vs. the straight arm you may return to a parent."
+    },
+    {
+      "name": "Serialize and Deserialize Binary Tree",
+      "url": "https://leetcode.com/problems/serialize-and-deserialize-binary-tree/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Preorder with null markers; rebuild via a consumed cursor."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Diameter of Binary Tree** — return the length (in edges) of the longest path between any two nodes in the tree. The path may or may not pass through the root.",
+      "url": "https://leetcode.com/problems/diameter-of-binary-tree/",
+      "tag": "report-return",
+      "answer": "**The trap.** The longest path may not pass through the root — and, crucially, a node cannot return \"the longest path through me\" to its parent. A path that *turns* at a node (goes down-left, then down-right) can't be extended upward: if you returned it, your parent would glue itself onto the middle of a bent path and build something illegal.\n\n> [!KEY] Separate two quantities\n> - What you **return** to your parent: the longest *downward* path from this node = `1 + max(L, R)`. This is straight, so it's extendable upward.\n> - What you **report** to the global answer: the longest path that *bends* at this node = `L + R` (in edges). Every path in the tree bends at exactly one highest node, so checking `L + R` at every node covers all possible paths.\n\n[[fig:m06-report-return]]\n\n```cpp\nint best = 0;\nint depth(TreeNode* n) {\n    if (!n) return 0;\n    int L = depth(n->left), R = depth(n->right);\n    best = max(best, L + R);   // REPORT: path bending here (counted in edges)\n    return 1 + max(L, R);      // RETURN: one straight arm my parent can extend\n}\n// answer = best;\n```\n\n**Complexity:** $O(n)$ time — one visit per node — and $O(h)$ recursion stack.\n\n**What generalizes:** once this clicks, *Binary Tree Maximum Path Sum* is the same skeleton with values instead of edge counts. This report-vs-return idea is the single most reused tree pattern in interviews — narrate it explicitly and you've signaled mastery of the whole family."
+    },
+    {
+      "q": "**Binary Tree Maximum Path Sum** — node values may be negative; find the maximum sum over all paths, where a path can start and end at any nodes and never revisits a node.",
+      "url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+      "tag": "max-path",
+      "answer": "**Why naive fails.** Summing `L + node + R` and returning it fails for the same reason as diameter — you can't hand a bent path to your parent. And there's a new subtlety: values can be **negative**, so blindly including a child's subtree can make your path *worse*.\n\n> [!INTUITION] Drop losing arms\n> An arm with negative total only drags the sum down. Attaching *nothing* (contribution 0) beats attaching a negative arm — so clamp each child's gain at zero.\n\n**The trick, step by step:**\n\n1. From each child, take the best *downward* gain, clamped: `int L = max(0, gain(n->left));`.\n2. **Report** the best bent path through this node: `L + n->val + R` — a complete candidate path.\n3. **Return** the best straight arm your parent can extend: `n->val + max(L, R)`.\n\n```cpp\nint best = INT_MIN;\nint gain(TreeNode* n) {\n    if (!n) return 0;\n    int L = max(0, gain(n->left));      // drop negative arms\n    int R = max(0, gain(n->right));\n    best = max(best, n->val + L + R);   // REPORT full path through n\n    return n->val + max(L, R);          // RETURN extendable arm\n}\n```\n\n> [!PITFALL]\n> Initialize `best = INT_MIN`, **not** 0. The tree may be a single negative node, and that lone node is a valid path — starting at 0 would silently \"win\" with a path that doesn't exist.\n\n**Complexity:** $O(n)$ time, $O(h)$ stack.\n\n**What generalizes:** the diameter skeleton plus two moves — clamp negative contributions, and make sure the global's initial value can't beat a legal answer. Both moves recur across hard tree problems."
+    },
+    {
+      "q": "**Validate Binary Search Tree** — determine whether a binary tree satisfies the BST property: every node in a left subtree is smaller than its ancestor, every node in a right subtree larger.",
+      "url": "https://leetcode.com/problems/validate-binary-search-tree/",
+      "tag": "bst-bounds",
+      "answer": "**The naive bug (extremely common in interviews):** checking only `node->left->val < node->val < node->right->val` locally. This passes trees that are *not* BSTs — e.g. root 5, right child 6, and 6's left child 3. Every parent-child triple looks fine, but 3 sits in 5's **right** subtree, so it violates the global rule that everything right of 5 must be > 5.\n\n[[fig:m06-bst-bounds]]\n\n> [!KEY] Carry bounds down\n> Each node is only valid inside an open interval `(low, high)` inherited from **all** its ancestors, not just its parent. Going left tightens the *upper* bound to the node's value; going right tightens the *lower* bound.\n\n```cpp\nbool valid(TreeNode* n, long low, long high) {\n    if (!n) return true;\n    if (n->val <= low || n->val >= high) return false;\n    return valid(n->left,  low, n->val)    // left subtree: max becomes n->val\n        && valid(n->right, n->val, high);  // right subtree: min becomes n->val\n}\n// call: valid(root, LONG_MIN, LONG_MAX);\n```\n\n> [!WARNING]\n> Use `long` with `LONG_MIN` / `LONG_MAX` for the seeds: node values can be `INT_MIN` or `INT_MAX`, and `int` sentinels would false-fail the comparison at the extremes.\n\n**Alternative:** an inorder traversal of a BST must be *strictly increasing* — track the previous value (or a `TreeNode*` previous pointer, dodging the sentinel issue entirely) and fail if `cur <= prev`.\n\n**Complexity:** both versions are $O(n)$ time, $O(h)$ stack. Explain the bounds version first — it demonstrates you understand *why* the local check is wrong, which is the real question being asked."
+    },
+    {
+      "q": "**Lowest Common Ancestor of a Binary Tree** — given two nodes `p` and `q` in a general binary tree (no BST ordering, no parent pointers), find their lowest common ancestor.",
+      "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/",
+      "tag": "lca",
+      "answer": "**Why naive fails.** With no BST ordering you can't steer by comparing values, and without parent pointers you can't walk upward. Computing full root-to-node paths for both targets works but costs extra passes and storage.\n\n> [!INTUITION] The split point\n> The LCA is the *deepest* node that has `p` in one subtree and `q` in the other — or that **is** one of them, with the other somewhere below. So make the recursion answer one question: \"did this subtree find `p` or `q`?\"\n\n**How the recursion encodes it:** `lca(node)` returns non-null if `p` or `q` is found in that subtree. At each node, look at what the two children report:\n\n- **Both** children return non-null → `p` and `q` sit on opposite sides → **this node is the LCA**.\n- **One** child returns non-null → bubble that pointer upward; the LCA (if any) is higher, or is that returned node itself.\n- Also, if the current node *is* `p` or `q`, return it immediately — if the other target is below, this node is the split point anyway.\n\n[[fig:m06-lca-signal]]\n\n```cpp\nTreeNode* lca(TreeNode* n, TreeNode* p, TreeNode* q) {\n    if (!n || n == p || n == q) return n;    // found one, or dead end\n    TreeNode* L = lca(n->left,  p, q);\n    TreeNode* R = lca(n->right, p, q);\n    if (L && R) return n;                     // p and q on opposite sides -> LCA\n    return L ? L : R;                         // bubble up the single hit\n}\n```\n\n**Complexity:** one post-order pass, $O(n)$ time, $O(h)$ stack, no parent pointers, no extra storage.\n\n**What generalizes:** for the **BST variant** it's even easier — walk from the root: both `p, q <` node → go left; both `>` → go right; otherwise you're at the split point. That's $O(h)$ with no recursion at all. The broader lesson: a return value can carry a *search signal*, not just a number."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: *\"Return the values visible when the tree is viewed from the right side, top to bottom.\"* Which approach fits most naturally?",
+      "options": [
+        "Post-order DFS, returning the max value of each subtree",
+        "Inorder traversal, keeping every other value",
+        "BFS level order, keeping the last node of each level",
+        "Pre-order DFS with a stack of ancestors"
+      ],
+      "answer": 2,
+      "explanation": "\"Viewed from the right, top to bottom\" is a per-level question in disguise: the rightmost node of each level is exactly what you'd see. BFS with the size freeze hands you each level as a batch — keep the last element. (A right-first DFS recording the first node seen at each depth also works, but it's the same insight.) The distractors don't respect levels at all: subtree maxima and inorder order say nothing about visibility.",
+      "tag": "pattern"
+    },
+    {
+      "q": "In the BFS template you replace `int sz = q.size(); for (int i = 0; i < sz; ++i)` with `for (int i = 0; i < q.size(); ++i)`. What actually happens?",
+      "options": [
+        "Nothing — the two loops are equivalent",
+        "Children pushed during the loop grow `q.size()` mid-flight, so nodes from the next level leak into the current one",
+        "The loop exits early and skips half of each level",
+        "It infinite-loops on any non-empty tree"
+      ],
+      "answer": 1,
+      "explanation": "Every `q.push(child)` increases `q.size()`, and since the loop re-reads it each iteration, the loop keeps running into the next level's nodes — your \"levels\" become a smear of mixed depths. It terminates (leaves push nothing), so it's not an infinite loop; it's worse: it runs and returns wrong groupings. Freeze `sz` before the loop, always.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "In the diameter DFS, what does a node return **to its parent**?",
+      "options": [
+        "`1 + max(L, R)` — its longest straight downward arm",
+        "`L + R` — the longest path bending at this node",
+        "The current value of the global `best`",
+        "`max(L, R)` — the taller child's height unchanged"
+      ],
+      "answer": 0,
+      "explanation": "The parent can only extend a *straight* path, so you return the longest downward arm: this node plus its taller side, `1 + max(L, R)`. The bent path `L + R` is a complete candidate answer, but it can't be extended upward — it goes to the global `best` instead. Returning `max(L, R)` forgets to count the current node, an off-by-one that shrinks every arm.",
+      "tag": "report-return"
+    },
+    {
+      "q": "A BST is built by inserting 8, 3, 10, 1, 6, 14, 4, 7 in that order. What is the 3rd smallest value?",
+      "options": ["3", "6", "1", "4"],
+      "answer": 3,
+      "explanation": "You don't need to trace the shape at all — inorder traversal of any BST yields sorted order, so the 3rd smallest is just the 3rd value in sorted order: 1, 3, **4**, 6, 7, 8, 10, 14. That shortcut *is* the Kth Smallest pattern: run inorder, decrement k at each node, stop when it hits zero.",
+      "tag": "trace"
+    },
+    {
+      "q": "A candidate validates a BST by checking, at every node, `left->val < val && val < right->val` (when children exist). Which tree exposes the bug?",
+      "options": [
+        "Root 2 with left child 1 and right child 3",
+        "Root 5 with right child 6, where 6 has left child 3",
+        "A single node with value INT_MAX",
+        "A perfect BST of 7 nodes"
+      ],
+      "answer": 1,
+      "explanation": "Locally everything passes: 3 < 6 looks fine at node 6. But 3 lives in 5's *right* subtree, so the global BST rule demands 3 > 5 — violated. Only bounds inherited from **all** ancestors (or a strictly-increasing inorder check) catch this. Options A and D are valid BSTs, and a single node passes any local check legitimately.",
+      "tag": "bst-trap"
+    },
+    {
+      "q": "Complexities of finding the LCA of two nodes: the general binary-tree recursion vs. the walk-down approach on a BST?",
+      "options": [
+        "$O(\\log n)$ for both",
+        "$O(n)$ for both — you must see every node either way",
+        "$O(n)$ general, $O(h)$ for the BST walk-down",
+        "$O(h)$ general, $O(n)$ for the BST"
+      ],
+      "answer": 2,
+      "explanation": "The general tree gives no steering information, so the recursion may visit all $n$ nodes. A BST tells you at every node which side both targets live on (both smaller → left, both larger → right), so you walk one root-to-split-point path: $O(h)$. Note $O(h)$ is only $O(\\log n)$ if the tree is balanced — a skewed BST makes it $O(n)$, which is why option A is wrong.",
+      "tag": "complexity"
+    },
+    {
+      "q": "In Binary Tree Maximum Path Sum, why does the template take `int L = max(0, gain(n->left));` instead of using the child's gain directly?",
+      "options": [
+        "A negative arm can only lower any path's total, so attaching nothing (0) is always at least as good",
+        "It prevents integer overflow when summing long paths",
+        "It's the null check — a missing child returns a negative sentinel",
+        "It guarantees the returned value is positive so the recursion terminates"
+      ],
+      "answer": 0,
+      "explanation": "Paths may start and end anywhere, so you're never *forced* to include a subtree. If a child's best downward gain is negative, including it strictly hurts — clamping to 0 means \"attach nothing.\" It has nothing to do with overflow or termination, and the null case is handled separately by `if (!n) return 0;`. Careful though: the *global* still starts at `INT_MIN`, because a lone negative node is a valid path.",
+      "tag": "template-detail"
+    }
+  ],
+  "figures": {
+    "m06-traversal-orders": {
+      "caption": "One recursion, three orders — the only difference is **when** the node is recorded relative to its child calls. Note the in-order sequence: on a BST it comes out sorted.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A five-node tree with its pre-order, in-order and post-order visit sequences\"><text x=\"20\" y=\"24\" class=\"t-bold\">one tree, three visit orders</text><line x1=\"162\" y1=\"94\" x2=\"110\" y2=\"144\" class=\"s-line\"/><line x1=\"182\" y1=\"94\" x2=\"232\" y2=\"144\" class=\"s-line\"/><line x1=\"92\" y1=\"174\" x2=\"64\" y2=\"224\" class=\"s-line\"/><line x1=\"110\" y1=\"174\" x2=\"138\" y2=\"224\" class=\"s-line\"/><circle cx=\"172\" cy=\"80\" r=\"17\" class=\"f-panel s-line\"/><text x=\"172\" y=\"85\" text-anchor=\"middle\" class=\"t-mono\">1</text><circle cx=\"100\" cy=\"160\" r=\"17\" class=\"f-panel s-line\"/><text x=\"100\" y=\"165\" text-anchor=\"middle\" class=\"t-mono\">2</text><circle cx=\"242\" cy=\"160\" r=\"17\" class=\"f-panel s-line\"/><text x=\"242\" y=\"165\" text-anchor=\"middle\" class=\"t-mono\">3</text><circle cx=\"56\" cy=\"240\" r=\"17\" class=\"f-panel s-line\"/><text x=\"56\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">4</text><circle cx=\"146\" cy=\"240\" r=\"17\" class=\"f-panel s-line\"/><text x=\"146\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"350\" y=\"84\" class=\"t-bold t-sm\">PRE-order (node, L, R)</text><text x=\"350\" y=\"108\" class=\"t-mono\">1 2 4 5 3</text><text x=\"350\" y=\"154\" class=\"t-bold t-sm\">IN-order (L, node, R)</text><text x=\"350\" y=\"178\" class=\"t-mono t-accent\">4 2 5 1 3</text><text x=\"490\" y=\"178\" class=\"t-sm t-muted\">BST &#8594; sorted!</text><text x=\"350\" y=\"224\" class=\"t-bold t-sm\">POST-order (L, R, node)</text><text x=\"350\" y=\"248\" class=\"t-mono t-accent2\">4 5 2 3 1</text><text x=\"490\" y=\"248\" class=\"t-sm t-muted\">children first</text></svg>"
+    },
+    "m06-report-return": {
+      "caption": "The report-vs-return split at node 2: the **bent path** 4–2–5 (highlighted) is reported to the global `best`, while only the **straight arm** `1 + max(L, R)` travels up to the parent (dashed arrow).",
+      "svg": "<svg viewBox=\"0 0 660 310\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Tree showing the bent path reported to a global versus the straight arm returned to the parent\"><text x=\"20\" y=\"24\" class=\"t-bold\">report the bend, return the arm</text><line x1=\"228\" y1=\"94\" x2=\"144\" y2=\"146\" class=\"s-line\"/><line x1=\"252\" y1=\"94\" x2=\"336\" y2=\"146\" class=\"s-line\"/><line x1=\"120\" y1=\"174\" x2=\"82\" y2=\"226\" class=\"s-accent\" stroke-width=\"3\"/><line x1=\"140\" y1=\"174\" x2=\"178\" y2=\"226\" class=\"s-accent\" stroke-width=\"3\"/><circle cx=\"240\" cy=\"80\" r=\"17\" class=\"f-panel s-line\"/><text x=\"240\" y=\"85\" text-anchor=\"middle\" class=\"t-mono\">1</text><circle cx=\"130\" cy=\"160\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"130\" y=\"165\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><circle cx=\"350\" cy=\"160\" r=\"17\" class=\"f-panel s-line\"/><text x=\"350\" y=\"165\" text-anchor=\"middle\" class=\"t-mono\">3</text><circle cx=\"74\" cy=\"240\" r=\"17\" class=\"f-panel s-line\"/><text x=\"74\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">4</text><circle cx=\"186\" cy=\"240\" r=\"17\" class=\"f-panel s-line\"/><text x=\"186\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">5</text><line x1=\"166\" y1=\"142\" x2=\"212\" y2=\"106\" class=\"s-accent2\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"440\" y=\"84\" class=\"t-bold t-sm\">at node 2:</text><text x=\"440\" y=\"110\" class=\"t-mono\">L = 1, R = 1</text><text x=\"440\" y=\"150\" class=\"t-accent\">report: L + R = 2</text><text x=\"440\" y=\"174\" class=\"t-sm t-muted\">bent path 4&#8211;2&#8211;5, goes to `best`</text><text x=\"440\" y=\"214\" class=\"t-accent2\">return: 1 + max(L, R) = 2</text><text x=\"440\" y=\"238\" class=\"t-sm t-muted\">straight arm node 1 can extend</text></svg>"
+    },
+    "m06-bfs-levels": {
+      "caption": "BFS processes the tree in horizontal bands. At the start of each `while` iteration the queue holds **exactly one level** — freeze `sz = q.size()` and pop exactly that many while the children queue up behind.",
+      "svg": "<svg viewBox=\"0 0 660 330\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Level-order BFS: tree with level bands and the frozen queue at the start of level 1\"><text x=\"20\" y=\"24\" class=\"t-bold\">BFS: one band at a time</text><rect x=\"30\" y=\"52\" width=\"330\" height=\"52\" rx=\"8\" class=\"f-panel2\"/><rect x=\"30\" y=\"132\" width=\"330\" height=\"52\" rx=\"8\" class=\"f-panel2\"/><rect x=\"30\" y=\"212\" width=\"330\" height=\"52\" rx=\"8\" class=\"f-panel2\"/><text x=\"38\" y=\"70\" class=\"t-sm t-muted\">level 0</text><text x=\"38\" y=\"150\" class=\"t-sm t-muted\">level 1</text><text x=\"38\" y=\"230\" class=\"t-sm t-muted\">level 2</text><line x1=\"198\" y1=\"92\" x2=\"146\" y2=\"144\" class=\"s-line\"/><line x1=\"222\" y1=\"92\" x2=\"274\" y2=\"144\" class=\"s-line\"/><line x1=\"126\" y1=\"172\" x2=\"96\" y2=\"224\" class=\"s-line\"/><line x1=\"146\" y1=\"172\" x2=\"176\" y2=\"224\" class=\"s-line\"/><line x1=\"292\" y1=\"172\" x2=\"322\" y2=\"224\" class=\"s-line\"/><circle cx=\"210\" cy=\"78\" r=\"17\" class=\"f-panel s-line\"/><text x=\"210\" y=\"83\" text-anchor=\"middle\" class=\"t-mono\">1</text><circle cx=\"136\" cy=\"158\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"136\" y=\"163\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><circle cx=\"284\" cy=\"158\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"284\" y=\"163\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><circle cx=\"88\" cy=\"238\" r=\"17\" class=\"f-panel s-line\"/><text x=\"88\" y=\"243\" text-anchor=\"middle\" class=\"t-mono\">4</text><circle cx=\"184\" cy=\"238\" r=\"17\" class=\"f-panel s-line\"/><text x=\"184\" y=\"243\" text-anchor=\"middle\" class=\"t-mono\">5</text><circle cx=\"330\" cy=\"238\" r=\"17\" class=\"f-panel s-line\"/><text x=\"330\" y=\"243\" text-anchor=\"middle\" class=\"t-mono\">6</text><text x=\"430\" y=\"126\" class=\"t-bold t-sm\">queue at start of level 1</text><rect x=\"430\" y=\"142\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"452\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><rect x=\"476\" y=\"142\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"498\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><text x=\"430\" y=\"216\" class=\"t-mono t-sm\">sz = 2 (frozen)</text><text x=\"430\" y=\"244\" class=\"t-sm t-muted\">pop exactly 2; children</text><text x=\"430\" y=\"268\" class=\"t-sm t-muted\">4, 5, 6 wait behind them</text></svg>"
+    },
+    "m06-bst-bounds": {
+      "caption": "The local-check trap: at node 6, the check `3 < 6` passes — but node 3 sits in 5's **right** subtree, so its inherited interval is `(5, 6)` and the value 3 is illegal. Only bounds carried down from all ancestors catch this.",
+      "svg": "<svg viewBox=\"0 0 660 310\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A non-BST that passes local parent-child checks: root 5, right child 6, whose left child 3 violates the inherited bounds\"><text x=\"20\" y=\"24\" class=\"t-bold\">why local checks lie</text><line x1=\"188\" y1=\"102\" x2=\"110\" y2=\"156\" class=\"s-line\"/><line x1=\"212\" y1=\"102\" x2=\"290\" y2=\"156\" class=\"s-line\"/><line x1=\"288\" y1=\"186\" x2=\"250\" y2=\"238\" class=\"s-line\"/><circle cx=\"200\" cy=\"88\" r=\"17\" class=\"f-panel s-line\"/><text x=\"200\" y=\"93\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"200\" y=\"56\" text-anchor=\"middle\" class=\"t-sm t-muted\">(&#8722;&#8734;, +&#8734;)</text><circle cx=\"98\" cy=\"170\" r=\"17\" class=\"f-panel s-line\"/><text x=\"98\" y=\"175\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"98\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">(&#8722;&#8734;, 5)</text><circle cx=\"300\" cy=\"170\" r=\"17\" class=\"f-panel s-line\"/><text x=\"300\" y=\"175\" text-anchor=\"middle\" class=\"t-mono\">6</text><text x=\"354\" y=\"175\" class=\"t-sm t-muted\">(5, +&#8734;)</text><circle cx=\"242\" cy=\"252\" r=\"17\" class=\"f-bad-soft s-bad\"/><text x=\"242\" y=\"257\" text-anchor=\"middle\" class=\"t-mono t-bad\">3</text><text x=\"242\" y=\"292\" text-anchor=\"middle\" class=\"t-sm t-bad\">must be in (5, 6) &#8212; 3 fails</text><text x=\"460\" y=\"84\" class=\"t-bold t-sm\">local check at 6:</text><text x=\"460\" y=\"110\" class=\"t-ok\">3 &lt; 6 &#10003; looks fine</text><text x=\"460\" y=\"150\" class=\"t-bold t-sm\">global rule:</text><text x=\"460\" y=\"176\" class=\"t-sm\">3 is in 5&#8217;s right subtree,</text><text x=\"460\" y=\"202\" class=\"t-bad\">so 3 must be &gt; 5 &#10007;</text></svg>"
+    },
+    "m06-lca-signal": {
+      "caption": "The post-order \"found signal\": nodes 6 (`p`) and 2 (`q`) each bubble a non-null pointer up (dashed arrows). Node 5 is the first node hearing hits from **both** sides — the split point, hence the LCA.",
+      "svg": "<svg viewBox=\"0 0 660 310\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"LCA via post-order signals: p and q bubble non-null returns up, and the first node with hits on both sides is the LCA\"><text x=\"20\" y=\"24\" class=\"t-bold\">LCA = first node hit from both sides</text><line x1=\"228\" y1=\"94\" x2=\"152\" y2=\"146\" class=\"s-line\"/><line x1=\"252\" y1=\"94\" x2=\"328\" y2=\"146\" class=\"s-line\"/><line x1=\"128\" y1=\"174\" x2=\"92\" y2=\"226\" class=\"s-line\"/><line x1=\"152\" y1=\"174\" x2=\"188\" y2=\"226\" class=\"s-line\"/><circle cx=\"240\" cy=\"80\" r=\"17\" class=\"f-panel s-line\"/><text x=\"240\" y=\"85\" text-anchor=\"middle\" class=\"t-mono\">3</text><circle cx=\"140\" cy=\"160\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"140\" y=\"165\" text-anchor=\"middle\" class=\"t-mono t-ok\">5</text><text x=\"140\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-ok\">LCA</text><circle cx=\"340\" cy=\"160\" r=\"17\" class=\"f-panel s-line\"/><text x=\"340\" y=\"165\" text-anchor=\"middle\" class=\"t-mono\">1</text><circle cx=\"80\" cy=\"240\" r=\"17\" class=\"f-warn-soft s-line\"/><text x=\"80\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">6</text><text x=\"80\" y=\"280\" text-anchor=\"middle\" class=\"t-sm t-muted\">p</text><circle cx=\"200\" cy=\"240\" r=\"17\" class=\"f-warn-soft s-line\"/><text x=\"200\" y=\"245\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"200\" y=\"280\" text-anchor=\"middle\" class=\"t-sm t-muted\">q</text><line x1=\"96\" y1=\"222\" x2=\"120\" y2=\"188\" class=\"s-accent2\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow-accent2)\"/><line x1=\"212\" y1=\"222\" x2=\"172\" y2=\"186\" class=\"s-accent2\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow-accent2)\"/><line x1=\"172\" y1=\"142\" x2=\"216\" y2=\"106\" class=\"s-ok\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow-ok)\"/><text x=\"430\" y=\"84\" class=\"t-bold t-sm\">at node 5:</text><text x=\"430\" y=\"110\" class=\"t-sm\">left returns 6 (a hit)</text><text x=\"430\" y=\"136\" class=\"t-sm\">right returns 2 (a hit)</text><text x=\"430\" y=\"170\" class=\"t-ok\">both non-null &#8594; 5 is the LCA</text><text x=\"430\" y=\"210\" class=\"t-bold t-sm\">at node 3:</text><text x=\"430\" y=\"236\" class=\"t-sm t-muted\">only left is non-null &#8594;</text><text x=\"430\" y=\"262\" class=\"t-sm t-muted\">bubble the pointer 5 upward</text></svg>"
+    }
+  }
+}

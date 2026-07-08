@@ -1,0 +1,266 @@
+{
+  "tag": "m11",
+  "week": "Week 6 · Module 11",
+  "title": "Graphs II: Dijkstra & MST",
+  "priority": "attack",
+  "summary": "Weighted graphs are where Flipkart hards and Microsoft mediums live: shortest paths (Dijkstra, Bellman-Ford, 0-1 BFS) and cheapest connections (Kruskal, Prim). You have never done these — but they are four templates plus one classification skill, and this module makes them mechanical.",
+  "notes": [
+    {
+      "heading": "Classify first: which tool does the problem want?",
+      "body": "In Module 10 every edge cost the same, so BFS layer-by-layer *was* the shortest path. The moment edges carry **weights** — flight prices, cable lengths, effort — BFS order lies to you, and you need one of four tools. The good news: weighted-graph problems announce themselves in the problem statement, almost word for word.\n\n| The statement says… | Reach for |\n|---|---|\n| shortest / cheapest / minimum-cost path, weights ≥ 0 | **Dijkstra** |\n| every move costs **0 or 1** (flip a cell, break a wall) | **0-1 BFS** with a deque |\n| negative weights, negative-cycle detection, \"at most K stops/edges\" | **Bellman-Ford** |\n| \"minimum cost to **connect all** points / cities\" | **MST** (Kruskal or Prim) |\n| \"minimize the **maximum** edge\" / bottleneck / effort | modified Dijkstra (relax with `max`) |\n\n> [!KEY]\n> Announcing the classification is half the score. Before you type a line, say: \"weighted, non-negative, single source, shortest path → Dijkstra, $O((V+E)\\\\log V)$, fits $n \\\\le 10^5$.\" Interviewers reward the classification and the complexity call as much as the working code.\n\n> [!EXAM]\n> In a timed OA, scan for the trigger words *before* reading the story. \"Connect all cities cheaply\" is MST even if the story is about fiber optics, water pipes, or space stations. \"At most K stops\" is the Bellman-Ford flag even though the problem *looks* like Dijkstra — that trap is a Flipkart favorite."
+    },
+    {
+      "heading": "Dijkstra — BFS that always expands the cheapest node next",
+      "body": "You already trust BFS: it processes nodes in increasing distance order because a plain queue happens to keep them sorted when every edge costs 1. Weights break that free sorting — so Dijkstra swaps the queue for a **min-heap**, which hands you the closest unfinalized node in $O(\\\\log V)$.\n\n> [!INTUITION] Ripples at different speeds\n> Picture water spreading from the source, but each edge is a pipe of different length. The wavefront reaches nodes in order of true distance. The heap is just the machine that tells you which node the wave touches next.\n\nThe core loop: pop the cheapest node, **finalize** it, then *relax* each outgoing edge — if going through the popped node is cheaper than the best known route to a neighbor, record the improvement and push it.\n\nOne discipline makes the template clean: the heap is allowed to hold **stale** entries. If a node's distance improves after it was pushed, we don't hunt down the old entry (no decrease-key gymnastics) — we push a new, better one and let the old one surface later. When you pop `(d, u)` and `d > dist[u]`, it's outdated: skip it.\n\n[[fig:m11-dijkstra-stale]]\n\n```cpp\n#include <bits/stdc++.h>\nusing namespace std;\ntypedef long long ll;\ntypedef pair<ll,int> pli;   // (distance, node)\n\n// adj[u] = list of {neighbor, weight}\nvector<ll> dijkstra(int n, vector<vector<pair<int,int>>>& adj, int src) {\n    vector<ll> dist(n, LLONG_MAX);\n    dist[src] = 0;\n    // min-heap: smallest distance on top\n    priority_queue<pli, vector<pli>, greater<pli>> pq;\n    pq.push({0, src});\n\n    while (!pq.empty()) {\n        auto [d, u] = pq.top(); pq.pop();\n        if (d > dist[u]) continue;        // stale entry — already found better\n        for (auto [v, w] : adj[u]) {\n            if (dist[u] + w < dist[v]) {  // relax\n                dist[v] = dist[u] + w;\n                pq.push({dist[v], v});\n            }\n        }\n    }\n    return dist;  // dist[i] == LLONG_MAX means unreachable\n}\n```\n\nComplexity: $O((V + E)\\\\log V)$ — every edge can push once, every push costs a log.\n\n> [!PITFALL] The whole catch: weights must be ≥ 0\n> \"Once popped, distance is final\" is only true when no future edge can *reduce* a path's cost. A single negative edge silently breaks the guarantee — Dijkstra returns wrong answers without crashing. See any negative weight → switch to Bellman-Ford.\n\n> [!NOTE]\n> The same skeleton bends to variants: max-heap + multiplication for *Path With Maximum Probability*, `max(dist[u], w)` for bottleneck problems (deep dive below). Learn the skeleton once, swap the relaxation."
+    },
+    {
+      "heading": "0-1 BFS — Dijkstra without the log factor",
+      "body": "Special case worth its own reflex: every edge weight is **0 or 1**. \"Cost to flip a cell\", \"walls you must break\", \"free move along the sign, 1 to go against it\". Dijkstra works, but the heap's $O(\\\\log V)$ per operation is paying for generality you don't need.\n\nWith only two weights, the frontier only ever spans **two distance values**, $d$ and $d+1$. A `deque` keeps them ordered with zero comparisons:\n\n- a **0-weight** edge keeps the neighbor at distance $d$ → push to the **front** (process before all the $d+1$ nodes),\n- a **1-weight** edge sends it to $d+1$ → push to the **back**.\n\n[[fig:m11-01bfs-deque]]\n\nThe deque stays sorted by distance automatically, so you pop nodes in nondecreasing order exactly like Dijkstra — in **$O(V + E)$**, no heap.\n\n```cpp\nvector<int> zeroOneBFS(int n, vector<vector<pair<int,int>>>& adj, int src) {\n    vector<int> dist(n, INT_MAX);\n    deque<int> dq;\n    dist[src] = 0; dq.push_front(src);\n    while (!dq.empty()) {\n        int u = dq.front(); dq.pop_front();\n        for (auto [v, w] : adj[u]) {          // w is 0 or 1\n            if (dist[u] + w < dist[v]) {\n                dist[v] = dist[u] + w;\n                if (w == 0) dq.push_front(v);  // free move: front\n                else        dq.push_back(v);   // costs 1: back\n            }\n        }\n    }\n    return dist;\n}\n```\n\n> [!EXAM]\n> Say it out loud: \"weights are 0/1, so I'll use 0-1 BFS with a deque for $O(V+E)$ instead of Dijkstra's $O(E \\\\log V)$.\" One sentence, and the interviewer knows you're fluent, not pattern-matching."
+    },
+    {
+      "heading": "Bellman-Ford — negative weights and edge budgets",
+      "body": "When weights can be **negative**, Dijkstra's finalization promise is void, and Bellman-Ford takes over. It drops the cleverness entirely: relax *every* edge, and repeat that sweep $V-1$ times. Why $V-1$? Any shortest path visits each node at most once, so it has at most $V-1$ edges — and each full sweep is guaranteed to lock in at least one more edge of every shortest path.\n\n```cpp\nstruct Edge { int u, v, w; };\n\n// returns false if a negative cycle is reachable\nbool bellmanFord(int n, vector<Edge>& edges, int src, vector<ll>& dist) {\n    dist.assign(n, LLONG_MAX);\n    dist[src] = 0;\n    for (int i = 0; i < n - 1; i++) {\n        for (auto& e : edges) {\n            if (dist[e.u] != LLONG_MAX && dist[e.u] + e.w < dist[e.v])\n                dist[e.v] = dist[e.u] + e.w;\n        }\n    }\n    for (auto& e : edges)               // one more pass: still improving?\n        if (dist[e.u] != LLONG_MAX && dist[e.u] + e.w < dist[e.v])\n            return false;               // negative cycle\n    return true;\n}\n```\n\nComplexity: $O(V \\\\cdot E)$ — slower than Dijkstra, but it's the only correct tool for negatives.\n\n> [!KEY] The V-th pass is a detector\n> After $V-1$ sweeps every shortest path is done improving — *unless* a negative cycle keeps shaving cost forever. So one extra sweep that still relaxes something ⇒ negative cycle. That's the entire \"can prices go infinitely negative?\" question.\n\nBellman-Ford has a second superpower: **hop limits**. \"At most K stops\" means \"at most K+1 edges\", and since each pass extends paths by at most one edge, you just run K+1 passes — *on a frozen copy of the array*, so one pass can't chain several new edges.\n\n[[fig:m11-bf-frozen]]\n\n> [!PITFALL]\n> Skip the frozen copy and a single pass can relay a relaxation through several edges — silently blowing your hop budget. The full trap (it killed many Cheapest-Flights submissions) is dissected in the deep dive below."
+    },
+    {
+      "heading": "MST — connect everything as cheaply as possible",
+      "body": "A **Minimum Spanning Tree** is the answer to a different question: not \"cheapest route from A to B\" but \"cheapest set of edges that makes *everything* one connected piece\". A spanning tree of $V$ nodes always has exactly $V-1$ edges — anything more contains a redundant cycle.\n\n> [!ANALOGY]\n> You're laying internet cable between villages. Every possible cable run has a price. You want everyone online for minimum total cost — and a cable that connects two already-connected villages is pure waste. MST = buy cheap, never buy redundant.\n\n**Kruskal**: sort *all* edges by weight, walk them cheapest-first, and take an edge unless it would close a cycle. The cycle oracle is **Union-Find (DSU)** — the structure you built in Module 10: if both endpoints already share a root, the edge is redundant.\n\n[[fig:m11-kruskal-scan]]\n\n```cpp\nstruct DSU {\n    vector<int> p, r;\n    DSU(int n): p(n), r(n, 0) { iota(p.begin(), p.end(), 0); }\n    int find(int x) { return p[x] == x ? x : p[x] = find(p[x]); } // path compression\n    bool unite(int a, int b) {\n        a = find(a); b = find(b);\n        if (a == b) return false;              // already connected → cycle\n        if (r[a] < r[b]) swap(a, b);\n        p[b] = a;\n        if (r[a] == r[b]) r[a]++;\n        return true;\n    }\n};\n\nll kruskal(int n, vector<Edge>& edges) {       // Edge{u, v, w}\n    sort(edges.begin(), edges.end(), [](auto& a, auto& b){ return a.w < b.w; });\n    DSU dsu(n);\n    ll cost = 0; int used = 0;\n    for (auto& e : edges) {\n        if (dsu.unite(e.u, e.v)) { cost += e.w; if (++used == n - 1) break; }\n    }\n    return cost;   // used < n-1 ⇒ graph disconnected, no spanning tree\n}\n```\n\nComplexity: $O(E \\\\log E)$, dominated by the sort. Path compression + union by rank makes each DSU call effectively $O(1)$.\n\n**Prim**: instead of scanning a global edge list, grow one connected blob from any start node, always grabbing the cheapest edge that crosses *out of* the blob. It is literally the Dijkstra skeleton with one change — the heap is keyed on **edge weight**, not accumulated path distance.\n\n```cpp\nll prim(int n, vector<vector<pair<int,int>>>& adj) { // adj[u]={v,w}\n    vector<bool> inMST(n, false);\n    priority_queue<pli, vector<pli>, greater<pli>> pq; // (edgeWeight, node)\n    pq.push({0, 0});\n    ll cost = 0; int cnt = 0;\n    while (!pq.empty() && cnt < n) {\n        auto [w, u] = pq.top(); pq.pop();\n        if (inMST[u]) continue;\n        inMST[u] = true; cost += w; cnt++;\n        for (auto [v, wt] : adj[u])\n            if (!inMST[v]) pq.push({wt, v});\n    }\n    return cnt == n ? cost : -1;   // -1 ⇒ disconnected\n}\n```\n\n> [!KEY] Which one, when?\n> **Kruskal** when the input is already an edge list or the graph is sparse ($O(E \\\\log E)$). **Prim** when the graph is dense — e.g. *Min Cost to Connect All Points* gives you a complete graph of $V^2$ Manhattan-distance edges, exactly Prim territory ($O(E \\\\log V)$). Either passes typical constraints; naming the trade-off is the interview win."
+    },
+    {
+      "heading": "Pitfalls that cost you the OA",
+      "body": "These are the bugs that turn a correct algorithm into a wrong submission. Check them *before* you hit run.\n\n- **Overflow.** Summed path costs and MST totals blow past `int` fast. Use `long long`, init to `LLONG_MAX` — and then guard every relaxation with `if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])`, or `MAX + w` wraps around to a huge negative and everything \"relaxes\".\n- **Forgetting the stale skip** `if (d > dist[u]) continue;`. Dijkstra still returns correct answers without it, but reprocesses nodes and can TLE on big inputs.\n- **Dijkstra with negative edges.** No error, no crash — just quietly wrong distances. Any negative weight → Bellman-Ford.\n- **Bellman-Ford without the frozen copy** under a hop limit — extra edges leak into a single pass.\n- **Directed vs undirected.** For undirected graphs push *both* `adj[u].push_back({v,w})` **and** `adj[v].push_back({u,w})`. Half of all wrong-answer graph bugs are one missing direction.\n- **1-indexed nodes** (Network Delay Time numbers them 1..n). Size arrays `n+1` or subtract 1 consistently — pick one and commit.\n- **Disconnected graph in MST**: fewer than $V-1$ edges taken ⇒ no spanning tree. Return −1, never a partial sum.\n\n> [!WARNING]\n> The overflow + missing-guard combo is the classic silent killer: your code passes every small test and fails the big hidden one. Make the `LLONG_MAX` guard muscle memory.\n\n**Edge cases to name unprompted:** single node (answer 0), unreachable target (return −1 / sentinel), self-loops and parallel edges (Kruskal's cycle check absorbs them — just don't crash).\n\n> [!EXAM] The four-sentence narration\n> (1) Classify: \"weighted, non-negative, single-source → Dijkstra.\" (2) Complexity before code: \"$O((V+E)\\\\log V)$, fits $n \\\\le 10^5$.\" (3) Mention the sharper tool when it applies: \"weights are 0/1, so 0-1 BFS,\" or \"minimax, so I relax with max.\" (4) Name the guarantee you lean on: \"Dijkstra finalizes only on non-negative weights.\" That script scores points even before the code compiles."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Find the Town Judge",
+      "url": "https://leetcode.com/problems/find-the-town-judge/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Warm-up on in/out degree bookkeeping — the judge has in-degree n−1 and out-degree 0."
+    },
+    {
+      "name": "Number of Provinces",
+      "url": "https://leetcode.com/problems/number-of-provinces/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Pure DSU / connected components — the union-find muscle you'll reuse inside Kruskal."
+    },
+    {
+      "name": "Network Delay Time",
+      "url": "https://leetcode.com/problems/network-delay-time/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Canonical single-source Dijkstra; the answer is the **max** finalized distance (and nodes are 1-indexed)."
+    },
+    {
+      "name": "Cheapest Flights Within K Stops",
+      "url": "https://leetcode.com/problems/cheapest-flights-within-k-stops/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The \"at most K edges\" trap — Bellman-Ford capped at K+1 passes with a frozen copy, not plain Dijkstra."
+    },
+    {
+      "name": "Path with Minimum Effort",
+      "url": "https://leetcode.com/problems/path-with-minimum-effort/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Dijkstra on a grid minimizing the **max** edge (bottleneck): relax with `max(e, diff)` instead of `+`."
+    },
+    {
+      "name": "Path With Maximum Probability",
+      "url": "https://leetcode.com/problems/path-with-maximum-probability/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Dijkstra flipped: max-heap and **multiplicative** weights — relax when the product improves."
+    },
+    {
+      "name": "Swim in Rising Water",
+      "url": "https://leetcode.com/problems/swim-in-rising-water/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Minimize the maximum cell along the path — bottleneck Dijkstra, or DSU + binary search on the answer."
+    },
+    {
+      "name": "Min Cost to Connect All Points",
+      "url": "https://leetcode.com/problems/min-cost-to-connect-all-points/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Textbook MST on a complete graph (Manhattan-distance edges) — dense, so Prim shines here."
+    },
+    {
+      "name": "Connecting Cities With Minimum Cost",
+      "url": "https://leetcode.com/problems/connecting-cities-with-minimum-cost/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Kruskal + DSU; detect the disconnected case — fewer than n−1 edges taken means return −1."
+    },
+    {
+      "name": "Min Cost to Make Connected",
+      "url": "https://leetcode.com/problems/minimize-malware-spread/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "DSU component-size reasoning — the linked slug is *Minimize Malware Spread*; verify by title before starting."
+    },
+    {
+      "name": "The Maze II",
+      "url": "https://leetcode.com/problems/the-maze-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Dijkstra with custom edges: one edge = rolling until you hit a wall, weight = cells traveled."
+    },
+    {
+      "name": "01 Matrix",
+      "url": "https://leetcode.com/problems/01-matrix/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Multi-source BFS seeded from every 0 — same skeleton as 0-1 BFS, cements the deque intuition."
+    },
+    {
+      "name": "Reachable Nodes In Subdivided Graph",
+      "url": "https://leetcode.com/problems/reachable-nodes-in-subdivided-graph/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Run Dijkstra first; the leftover move budget at each endpoint gates how many subdivided nodes you count."
+    },
+    {
+      "name": "Find Critical and Pseudo-Critical Edges in MST",
+      "url": "https://leetcode.com/problems/find-critical-and-pseudo-critical-edges-in-minimum-spanning-tree/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Per edge, rerun Kruskal with it **forbidden** (critical?) or **forced in** (pseudo-critical?) and compare weights."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Cheapest Flights Within K Stops** — given flights with prices, find the cheapest route from `src` to `dst` using at most K stops. Why does plain Dijkstra fail here, and what replaces it?",
+      "url": "https://leetcode.com/problems/cheapest-flights-within-k-stops/",
+      "tag": "k-stops-bf",
+      "answer": "**The trap.** Your reflex says Dijkstra — weighted, non-negative, shortest path. But Dijkstra's core promise, *once a node is popped its distance is final*, assumes cost is the only thing that matters. Here there's a **second resource**: stops. The globally cheapest way to reach some airport might burn too many stops to ever continue to `dst`, while a *more expensive* route with fewer hops keeps the journey alive. Finalizing on price alone throws away exactly the paths you may need.\n\n> [!INTUITION] Two currencies, one heap\n> Dijkstra can only optimize one currency. When a problem prices paths in two (cost **and** hops), either expand the state to (node, hops) — or use a tool whose passes naturally count edges.\n\n**The fix — Bellman-Ford, capped.** A path with at most K stops has at most **K+1 edges**. Each Bellman-Ford pass extends shortest paths by at most one edge, so run exactly K+1 passes. The one subtlety: relax against distances **frozen from the previous pass**. Relax in place, and one pass can chain an edge you *just* improved this round — sneaking multiple new edges into a single pass and blowing the hop budget.\n\n[[fig:m11-bf-frozen]]\n\n```cpp\nint findCheapestPrice(int n, vector<vector<int>>& flights, int src, int dst, int K) {\n    vector<int> dist(n, INT_MAX);\n    dist[src] = 0;\n    for (int i = 0; i <= K; i++) {          // K stops ⇒ K+1 edges\n        vector<int> tmp = dist;             // <-- freeze: read old, write new\n        for (auto& f : flights) {\n            int u = f[0], v = f[1], w = f[2];\n            if (dist[u] != INT_MAX && dist[u] + w < tmp[v])\n                tmp[v] = dist[u] + w;\n        }\n        dist = tmp;\n    }\n    return dist[dst] == INT_MAX ? -1 : dist[dst];\n}\n```\n\nThe `tmp` copy **is** the whole trick — drop it and you silently allow K+1 stops instead of K. **Time $O(K \\\\cdot E)$, space $O(V)$.**\n\n**What generalizes:** any \"shortest path with a budget on edges/uses/passes\" bends to the same pattern — pass-limited relaxation over a frozen snapshot. It's also your template for \"can this be done within K rounds?\" DP-on-graphs questions."
+    },
+    {
+      "q": "**Path with Minimum Effort / Swim in Rising Water** — find a grid path from top-left to bottom-right minimizing the *largest* single step (height difference / water level) along the way. How does Dijkstra handle a max instead of a sum?",
+      "url": "https://leetcode.com/problems/path-with-minimum-effort/",
+      "tag": "minimax-dijkstra",
+      "answer": "**Why naive fails.** BFS ignores weights entirely, and standard Dijkstra minimizes the **sum** of steps — but this path's cost is its single **worst** step: the tallest cliff you climb, or the highest water you must wait for. Summing gives you the wrong objective, not just the wrong number.\n\n[[fig:m11-minimax-path]]\n\n> [!KEY] Dijkstra only needs monotonicity\n> The finalization guarantee doesn't secretly depend on `+`. It needs one property of the relaxation: **extending a path never makes it better**. `dist[u] + w` has it (non-negative w). But so does `max(dist[u], w)` — a bottleneck can only stay equal or rise as the path grows. Swap the relaxation, keep everything else: heap, stale skip, finalization.\n\n**The algorithm:** run the exact Dijkstra skeleton on the grid; the \"distance\" of a cell is the smallest possible maximum-step needed to reach it. Bonus: the first time you *pop* the target cell, its bottleneck is final — return immediately.\n\n```cpp\nint minimumEffortPath(vector<vector<int>>& h) {\n    int m = h.size(), n = h[0].size();\n    vector<vector<int>> eff(m, vector<int>(n, INT_MAX));\n    priority_queue<array<int,3>, vector<array<int,3>>, greater<>> pq; // (effort, r, c)\n    eff[0][0] = 0; pq.push({0, 0, 0});\n    int dr[] = {0,0,1,-1}, dc[] = {1,-1,0,0};\n    while (!pq.empty()) {\n        auto [e, r, c] = pq.top(); pq.pop();\n        if (r == m-1 && c == n-1) return e;   // first time we pop the target = answer\n        if (e > eff[r][c]) continue;\n        for (int k = 0; k < 4; k++) {\n            int nr = r + dr[k], nc = c + dc[k];\n            if (nr<0||nc<0||nr>=m||nc>=n) continue;\n            int cost = max(e, abs(h[nr][nc] - h[r][c]));  // bottleneck relaxation\n            if (cost < eff[nr][nc]) { eff[nr][nc] = cost; pq.push({cost, nr, nc}); }\n        }\n    }\n    return 0;\n}\n```\n\n**Time $O(V \\\\log V)$ with $V = m \\\\cdot n$.** *Swim in Rising Water* is the identical idea — relax with `max(dist[u], grid[nr][nc])`.\n\n**What generalizes:** any \"minimize the maximum / maximize the minimum along a path\" is minimax-Dijkstra. And name the alternative in interviews: it's also a **union-find + binary-search-on-answer** problem — \"is there a path using only cells ≤ T?\" is monotone in T — a great second solution to mention out loud."
+    },
+    {
+      "q": "**0-1 BFS (Minimum Obstacle Removal to Reach Corner)** — every grid move costs 0 (empty cell) or 1 (obstacle you remove). Find the cheapest path to the corner faster than Dijkstra.",
+      "tag": "0-1-bfs",
+      "answer": "**The setup.** \"Minimum walls to break\", \"minimum sign flips to travel\", \"min obstacles removed\": every move costs **0 or 1**. Dijkstra is correct here but drags an $O(\\\\log V)$ heap cost through every operation — overhead you don't need for two possible weights.\n\n**The trick.** With weights in {0, 1}, the frontier only ever contains nodes at two distances, $d$ and $d+1$. A **deque** keeps them sorted for free: a 0-cost edge keeps the neighbor at distance $d$ → push **front** (handle before any $d+1$ node); a 1-cost edge → push **back**. Pops come out in nondecreasing distance order — the exact invariant that makes Dijkstra correct — with zero heap operations, so the whole thing runs in **$O(V + E)$**.\n\n[[fig:m11-01bfs-deque]]\n\n```cpp\n// Minimum Obstacle Removal to Reach Corner: '1' cells cost 1 to enter, '0' cost 0\nint minObstacles(vector<vector<int>>& g) {\n    int m = g.size(), n = g[0].size();\n    vector<vector<int>> dist(m, vector<int>(n, INT_MAX));\n    deque<pair<int,int>> dq;\n    dist[0][0] = 0; dq.push_front({0, 0});\n    int dr[]={0,0,1,-1}, dc[]={1,-1,0,0};\n    while (!dq.empty()) {\n        auto [r, c] = dq.front(); dq.pop_front();\n        for (int k = 0; k < 4; k++) {\n            int nr=r+dr[k], nc=c+dc[k];\n            if (nr<0||nc<0||nr>=m||nc>=n) continue;\n            int w = g[nr][nc];                 // 0 or 1\n            if (dist[r][c] + w < dist[nr][nc]) {\n                dist[nr][nc] = dist[r][c] + w;\n                if (w == 0) dq.push_front({nr, nc});\n                else        dq.push_back({nr, nc});\n            }\n        }\n    }\n    return dist[m-1][n-1];\n}\n```\n\n**Time $O(V + E)$, space $O(V)$** — on an $m \\\\times n$ grid that's $O(mn)$.\n\n> [!EXAM]\n> The sentence to say in an interview: *\"weights are 0/1, so I'll use 0-1 BFS with a deque for $O(V+E)$ instead of Dijkstra's $O(E \\\\log V)$.\"* It signals real fluency — you chose the sharper tool and can justify it.\n\n**What generalizes:** multi-source BFS (*01 Matrix*) uses the same skeleton with several starting cells at distance 0; and the deque idea extends to weights in {0, k} whenever only two edge costs exist."
+    },
+    {
+      "q": "**Kruskal vs Prim (Min Cost to Connect All Points)** — both build a minimum spanning tree greedily. When do you pick which, why is DSU the real star of Kruskal, and how do the critical / pseudo-critical edge tests work?",
+      "url": "https://leetcode.com/problems/min-cost-to-connect-all-points/",
+      "tag": "mst-kruskal",
+      "answer": "Both algorithms are greedy; the difference is *what* they greedily pick.\n\n- **Kruskal** sorts *all edges* globally and adds the cheapest that doesn't create a cycle. The cycle test is **Union-Find**: if both endpoints already share a root, the edge would close a loop — skip it. Best when the graph is **sparse** or the edges arrive as a pre-built list. **$O(E \\\\log E)$**, dominated by the sort.\n- **Prim** grows one connected blob, always grabbing the cheapest edge leaving the blob (min-heap keyed on edge weight — the Dijkstra skeleton with `w` instead of `dist[u]+w`). Best on **dense** graphs / adjacency matrices. **$O(E \\\\log V)$**.\n\n[[fig:m11-kruskal-scan]]\n\n> [!INTUITION] Why Kruskal clicks\n> An MST is just \"connect everything as cheaply as possible without redundancy\". Sorting guarantees you always *consider* the cheapest useful edge first; DSU is the $O(\\\\alpha(n)) \\\\approx O(1)$ oracle answering \"would this edge be redundant?\" Path compression + union by rank is what makes that oracle near-constant — DSU, not the sort, is the star.\n\nFor **Min Cost to Connect All Points**, the graph is *complete*: every pair of points is an edge weighted by Manhattan distance, so $E = V^2$. That density is exactly when you'd lean Prim (no need to materialize and sort a quarter-million edges), though either fits the constraints — say that trade-off out loud.\n\n**The interview-grade extension — Critical and Pseudo-Critical Edges.** Once MST weight is a subroutine, harder questions become query games:\n\n- An edge is **critical** if removing it raises the MST weight (it's in *every* MST). Test: run Kruskal with that edge **forbidden**. If the total rises — or the graph disconnects — it's critical.\n- An edge is **pseudo-critical** if it appears in *some* MST. Test: **force it in first** (union its endpoints, start `cost` at its weight), then run Kruskal normally. If the final weight matches the true MST weight, some MST contains it.\n\nBoth tests are just Kruskal reruns with one edge skipped or pre-committed — $O(E^2 \\\\log E)$ overall for the LeetCode Hard, and the reduction \"answer each query with a slightly-tweaked Kruskal\" is the genuinely clever part worth remembering.\n\n**What generalizes:** \"force an element in, or lock it out, then rerun the greedy\" is a reusable probe for any matroid-flavored greedy — it answers \"is this choice mandatory / possible?\" without new theory."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: \"find a path from the top-left to the bottom-right of a grid that minimizes the **largest** height difference between adjacent cells on the path.\" Which tool fits?",
+      "options": [
+        "Plain BFS — it's an unweighted grid, so layers give shortest paths",
+        "Bellman-Ford — height differences can be negative",
+        "Dijkstra with the relaxation changed to `max(dist[u], w)`",
+        "Kruskal's MST over all cells, then sum the tree edges"
+      ],
+      "answer": 2,
+      "explanation": "The path's cost is its single worst step — a *minimax* objective. Dijkstra only needs the relaxation to be monotonic (extending a path never improves it), and `max(dist[u], w)` qualifies, so the whole skeleton carries over. BFS ignores weights entirely; Bellman-Ford is tempting because \"differences\" sounds negative, but you take absolute differences, and the objective — max, not sum — is the real issue; an MST connects *all* cells, which is a different question than one best path.",
+      "tag": "pattern"
+    },
+    {
+      "q": "You delete the line `if (d > dist[u]) continue;` from the Dijkstra template but change nothing else. On a graph with non-negative weights, what happens?",
+      "options": [
+        "Answers stay correct, but stale heap entries get fully re-expanded — wasted work that can TLE on large inputs",
+        "Distances become wrong for any node reachable by two different paths",
+        "The heap underflows because entries are popped twice",
+        "It loops forever on graphs containing a cycle"
+      ],
+      "answer": 0,
+      "explanation": "The stale-skip is a *performance* guard, not a correctness one: relaxation `if (dist[u] + w < dist[v])` still refuses to make anything worse, so the final array is identical. But every outdated entry now re-scans its adjacency list, and on dense inputs that's the difference between passing and TLE. The \"wrong distances\" option describes what happens with *negative* edges — a different bug entirely.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "Dijkstra implemented with a binary min-heap on a graph with $V$ nodes and $E$ edges runs in:",
+      "options": [
+        "$O(V^2)$",
+        "$O((V + E)\\\\log V)$",
+        "$O(V \\\\cdot E)$",
+        "$O(E + V \\\\log V)$"
+      ],
+      "answer": 1,
+      "explanation": "Each edge can trigger at most one push, each push/pop costs $O(\\\\log V)$ (heap size stays $O(E)$, and $\\\\log E \\\\le 2\\\\log V$), giving $O((V+E)\\\\log V)$. $O(V^2)$ is the old array-scan implementation (fine for dense graphs), $O(V \\\\cdot E)$ is Bellman-Ford, and $O(E + V\\\\log V)$ is the Fibonacci-heap bound you cite but never implement in a 45-minute interview.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Run the Dijkstra template from `S` on the undirected weighted graph: S–A (5), S–B (2), B–A (1), A–C (2). When it finishes, `(dist[A], dist[C])` equals:",
+      "options": [
+        "(5, 7)",
+        "(3, 7)",
+        "(5, 5)",
+        "(3, 5)"
+      ],
+      "answer": 3,
+      "explanation": "Pop S (0): push A@5, B@2. Pop B (2): relax B–A gives A@3 — better than 5, push it. Pop A at 3 (the stale A@5 gets skipped later): relax A–C gives C@5. So dist[A]=3 via S→B→A, dist[C]=3+2=5. If you answered (5, 7) you finalized A the moment S first touched it — that's BFS thinking; the heap exists precisely so the cheaper route through B wins.",
+      "tag": "trace"
+    },
+    {
+      "q": "In Cheapest Flights Within K Stops you run K+1 Bellman-Ford passes but relax **in place** on `dist` instead of writing to a frozen `tmp` copy. The consequence?",
+      "options": [
+        "TLE — in-place relaxation is asymptotically slower",
+        "False positives on negative-cycle detection",
+        "One pass can chain several freshly-relaxed edges, so paths exceed K stops and the answer can be too cheap",
+        "Nodes unreachable from `src` cause an integer-overflow crash"
+      ],
+      "answer": 2,
+      "explanation": "Within a single in-place pass, an edge can relax using a distance that was itself just improved *this* pass — relaying an update across multiple edges at once. Each pass is supposed to mean \"one more edge allowed\"; the leak breaks that meaning and admits paths with more than K stops, returning a price that's too low. Speed is unaffected (same loop), and there are no negative weights here to detect.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "During Kruskal's scan, `dsu.unite(u, v)` returns `false` for the current edge. What does that mean, and what do you do?",
+      "options": [
+        "The graph is disconnected — abort and return −1 immediately",
+        "u and v already share a component — taking this edge would close a cycle, so skip it and move on",
+        "The edge weight is negative, which DSU cannot represent",
+        "Union by rank failed — retry the call with the arguments swapped"
+      ],
+      "answer": 1,
+      "explanation": "`unite` returning false means both endpoints already have the same root: they're connected through cheaper edges you took earlier, so this edge is redundant and adding it would create a cycle. Skipping it is the entire cycle-avoidance mechanism of Kruskal. Disconnection is diagnosed only at the *end* — if fewer than n−1 edges were taken — never from a single rejected edge.",
+      "tag": "mst"
+    },
+    {
+      "q": "Your weighted graph contains one edge of weight −3, but no negative cycles. Which statement about running standard Dijkstra is true?",
+      "options": [
+        "It works fine — problems only arise when a negative *cycle* exists",
+        "It throws or crashes when the negative edge is relaxed",
+        "It becomes correct if you first add +3 to every edge weight and subtract at the end",
+        "It can silently return wrong distances — the finalization guarantee breaks; use Bellman-Ford instead"
+      ],
+      "answer": 3,
+      "explanation": "Dijkstra finalizes a node when popped, betting that no future path can undercut it — one negative edge voids that bet even without a cycle, and nothing crashes: you just get quietly wrong answers. The +constant \"fix\" is a classic false friend: it adds more total to paths with more edges, changing which path is shortest. Negative weights (even cycle-free) → Bellman-Ford, $O(V \\\\cdot E)$.",
+      "tag": "pitfall"
+    }
+  ],
+  "figures": {
+    "m11-dijkstra-stale": {
+      "caption": "Lazy deletion in Dijkstra. S first pushes A at distance 4, but popping B (distance 1) relaxes B–A and pushes a better entry, A at 3. The heap now holds both — when the old (4, A) finally surfaces, `4 > dist[A] = 3` exposes it as stale and it's skipped. No decrease-key needed.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Dijkstra graph with a stale heap entry being skipped\"><text x=\"20\" y=\"24\" class=\"t-bold\">pop (d, u): if d &gt; dist[u], it is stale — skip</text><line x1=\"106\" y1=\"134\" x2=\"234\" y2=\"86\" class=\"s-line\" stroke-width=\"2\"/><line x1=\"106\" y1=\"146\" x2=\"234\" y2=\"194\" class=\"s-line\" stroke-width=\"2\"/><line x1=\"250\" y1=\"183\" x2=\"250\" y2=\"97\" class=\"s-accent\" stroke-width=\"2\"/><line x1=\"266\" y1=\"86\" x2=\"394\" y2=\"134\" class=\"s-line\" stroke-width=\"2\"/><text x=\"170\" y=\"98\" text-anchor=\"middle\" class=\"t-sm t-mono\">4</text><text x=\"170\" y=\"190\" text-anchor=\"middle\" class=\"t-sm t-mono\">1</text><text x=\"270\" y=\"144\" class=\"t-sm t-mono t-accent\">2</text><text x=\"330\" y=\"98\" text-anchor=\"middle\" class=\"t-sm t-mono\">5</text><circle cx=\"90\" cy=\"140\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"90\" y=\"145\" text-anchor=\"middle\" class=\"t-mono t-accent\">S</text><circle cx=\"250\" cy=\"80\" r=\"17\" class=\"f-panel s-line\"/><text x=\"250\" y=\"85\" text-anchor=\"middle\" class=\"t-mono\">A</text><circle cx=\"250\" cy=\"200\" r=\"17\" class=\"f-panel s-line\"/><text x=\"250\" y=\"205\" text-anchor=\"middle\" class=\"t-mono\">B</text><circle cx=\"410\" cy=\"140\" r=\"17\" class=\"f-panel s-line\"/><text x=\"410\" y=\"145\" text-anchor=\"middle\" class=\"t-mono\">C</text><text x=\"90\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 0</text><text x=\"250\" y=\"50\" text-anchor=\"middle\" class=\"t-sm t-accent\">dist 4 → 3</text><text x=\"250\" y=\"240\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 1</text><text x=\"410\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 8</text><rect x=\"470\" y=\"50\" width=\"170\" height=\"200\" rx=\"8\" class=\"f-panel2 s-line\"/><text x=\"485\" y=\"78\" class=\"t-sm t-bold\">heap pops, in order</text><text x=\"485\" y=\"112\" class=\"t-mono\">(1, B)</text><text x=\"560\" y=\"112\" class=\"t-sm t-ok\">final</text><text x=\"485\" y=\"148\" class=\"t-mono\">(3, A)</text><text x=\"560\" y=\"148\" class=\"t-sm t-ok\">final</text><text x=\"485\" y=\"184\" class=\"t-mono\">(4, A)</text><text x=\"560\" y=\"184\" class=\"t-sm t-bad\">stale ✗</text><text x=\"485\" y=\"216\" class=\"t-sm t-muted\">4 &gt; dist[A] = 3</text></svg>"
+    },
+    "m11-01bfs-deque": {
+      "caption": "The 0-1 BFS deque. Neighbors reached by a **0-weight** edge stay at distance *d* and go to the **front**; **1-weight** edges send nodes to distance *d + 1* at the **back**. At most two distinct distances ever coexist, so pops come out sorted — Dijkstra order with no heap.",
+      "svg": "<svg viewBox=\"0 0 660 230\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"0-1 BFS deque with 0-weight pushes to the front and 1-weight pushes to the back\"><text x=\"20\" y=\"24\" class=\"t-bold\">0-edges → front, 1-edges → back</text><rect x=\"200\" y=\"92\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"222\" y=\"120\" text-anchor=\"middle\" class=\"t-mono t-accent\">d</text><rect x=\"246\" y=\"92\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"268\" y=\"120\" text-anchor=\"middle\" class=\"t-mono t-accent\">d</text><rect x=\"292\" y=\"92\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"314\" y=\"120\" text-anchor=\"middle\" class=\"t-mono t-accent\">d</text><rect x=\"338\" y=\"92\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"360\" y=\"120\" text-anchor=\"middle\" class=\"t-mono\">d+1</text><rect x=\"384\" y=\"92\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"406\" y=\"120\" text-anchor=\"middle\" class=\"t-mono\">d+1</text><text x=\"222\" y=\"164\" text-anchor=\"middle\" class=\"t-sm t-muted\">front</text><text x=\"406\" y=\"164\" text-anchor=\"middle\" class=\"t-sm t-muted\">back</text><text x=\"110\" y=\"74\" text-anchor=\"middle\" class=\"t-ok\">w = 0</text><line x1=\"125\" y1=\"88\" x2=\"190\" y2=\"110\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><text x=\"545\" y=\"74\" text-anchor=\"middle\" class=\"t-accent2\">w = 1</text><line x1=\"530\" y1=\"88\" x2=\"440\" y2=\"110\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"20\" y=\"205\" class=\"t-sm t-muted\">the deque never holds more than two distinct distances — pops come out sorted, like Dijkstra</text></svg>"
+    },
+    "m11-kruskal-scan": {
+      "caption": "Kruskal's scan on 4 nodes. Edges sorted by weight are considered left to right: A–B (1) and B–C (2) are taken, A–C (3) is **rejected** because DSU says its endpoints are already connected (cycle), C–D (4) is taken — and with n − 1 = 3 edges the MST (cost 1 + 2 + 4 = 7) is complete, so B–D (5) is never examined.",
+      "svg": "<svg viewBox=\"0 0 660 280\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Kruskal scanning sorted edges and building an MST\"><text x=\"20\" y=\"24\" class=\"t-bold\">scan cheapest-first; DSU vetoes cycles</text><rect x=\"20\" y=\"56\" width=\"110\" height=\"44\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"75\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">A–B 1</text><rect x=\"145\" y=\"56\" width=\"110\" height=\"44\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"200\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">B–C 2</text><rect x=\"270\" y=\"56\" width=\"110\" height=\"44\" rx=\"6\" class=\"f-bad-soft s-bad\"/><text x=\"325\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">A–C 3</text><rect x=\"395\" y=\"56\" width=\"110\" height=\"44\" rx=\"6\" class=\"f-ok-soft s-ok\"/><text x=\"450\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">C–D 4</text><rect x=\"520\" y=\"56\" width=\"110\" height=\"44\" rx=\"6\" class=\"f-panel s-muted o-60\"/><text x=\"575\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-muted\">B–D 5</text><text x=\"75\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-ok\">take</text><text x=\"200\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-ok\">take</text><text x=\"325\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-bad\">cycle ✗</text><text x=\"450\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-ok\">take</text><text x=\"575\" y=\"128\" text-anchor=\"middle\" class=\"t-sm t-muted\">n−1 done</text><text x=\"20\" y=\"215\" class=\"t-bold\">MST</text><line x1=\"177\" y1=\"210\" x2=\"263\" y2=\"210\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"297\" y1=\"210\" x2=\"383\" y2=\"210\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"417\" y1=\"210\" x2=\"503\" y2=\"210\" class=\"s-ok\" stroke-width=\"2\"/><circle cx=\"160\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"160\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">A</text><circle cx=\"280\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"280\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">B</text><circle cx=\"400\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"400\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">C</text><circle cx=\"520\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"520\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">D</text><text x=\"220\" y=\"252\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"340\" y=\"252\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"460\" y=\"252\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text></svg>"
+    },
+    "m11-minimax-path": {
+      "caption": "Minimax (bottleneck) path cost. The path S → X → Y → T has steps 2, 8, 3; its cost is the **worst single step**, 8 — not the sum 13. Dijkstra still applies because `max(dist[u], w)` is monotonic: the running bottleneck under each node never decreases as the path extends.",
+      "svg": "<svg viewBox=\"0 0 660 210\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A path whose cost is its maximum edge rather than the sum\"><text x=\"20\" y=\"24\" class=\"t-bold\">relax with max(dist[u], w), not dist[u] + w</text><line x1=\"97\" y1=\"120\" x2=\"223\" y2=\"120\" class=\"s-line\" stroke-width=\"2\"/><line x1=\"257\" y1=\"120\" x2=\"383\" y2=\"120\" class=\"s-bad\" stroke-width=\"2.5\"/><line x1=\"417\" y1=\"120\" x2=\"543\" y2=\"120\" class=\"s-line\" stroke-width=\"2\"/><text x=\"160\" y=\"104\" text-anchor=\"middle\" class=\"t-sm t-mono\">2</text><text x=\"320\" y=\"104\" text-anchor=\"middle\" class=\"t-mono t-bad t-bold\">8</text><text x=\"480\" y=\"104\" text-anchor=\"middle\" class=\"t-sm t-mono\">3</text><circle cx=\"80\" cy=\"120\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"80\" y=\"125\" text-anchor=\"middle\" class=\"t-mono t-accent\">S</text><circle cx=\"240\" cy=\"120\" r=\"17\" class=\"f-panel s-line\"/><text x=\"240\" y=\"125\" text-anchor=\"middle\" class=\"t-mono\">X</text><circle cx=\"400\" cy=\"120\" r=\"17\" class=\"f-panel s-line\"/><text x=\"400\" y=\"125\" text-anchor=\"middle\" class=\"t-mono\">Y</text><circle cx=\"560\" cy=\"120\" r=\"17\" class=\"f-panel s-line\"/><text x=\"560\" y=\"125\" text-anchor=\"middle\" class=\"t-mono\">T</text><text x=\"80\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-muted\">0</text><text x=\"240\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-muted\">2</text><text x=\"400\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-bad\">8</text><text x=\"560\" y=\"170\" text-anchor=\"middle\" class=\"t-mono t-bad\">8</text><text x=\"20\" y=\"198\" class=\"t-sm t-muted\">the answer is the tallest single step — here 8, even though 2 + 8 + 3 = 13</text></svg>"
+    },
+    "m11-bf-frozen": {
+      "caption": "Hop-limited Bellman-Ford. Each pass **reads** the frozen `dist` array from the previous pass and **writes** improvements into a fresh `tmp` copy (the highlighted cell just improved from ∞ to 9). Because writes never feed back into the same pass, one pass extends paths by exactly one edge — the hop budget stays honest.",
+      "svg": "<svg viewBox=\"0 0 660 250\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Bellman-Ford pass reading a frozen array and writing to a copy\"><text x=\"20\" y=\"24\" class=\"t-bold\">read the frozen array, write the copy</text><rect x=\"20\" y=\"70\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"98\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"66\" y=\"70\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"98\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"112\" y=\"70\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"98\" text-anchor=\"middle\" class=\"t-mono\">∞</text><rect x=\"158\" y=\"70\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"98\" text-anchor=\"middle\" class=\"t-mono\">7</text><rect x=\"204\" y=\"70\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"98\" text-anchor=\"middle\" class=\"t-mono\">∞</text><text x=\"270\" y=\"98\" class=\"t-sm t-muted\">dist — pass i−1 (read only)</text><line x1=\"130\" y1=\"122\" x2=\"130\" y2=\"152\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"152\" y=\"142\" class=\"t-sm t-accent\">relax every edge once</text><rect x=\"20\" y=\"160\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"188\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"66\" y=\"160\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"188\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"112\" y=\"160\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"188\" text-anchor=\"middle\" class=\"t-mono t-accent\">9</text><rect x=\"158\" y=\"160\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"188\" text-anchor=\"middle\" class=\"t-mono\">7</text><rect x=\"204\" y=\"160\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"188\" text-anchor=\"middle\" class=\"t-mono\">∞</text><text x=\"270\" y=\"188\" class=\"t-sm t-muted\">tmp — pass i (write here)</text><text x=\"20\" y=\"238\" class=\"t-sm t-muted\">writes go to tmp, so one pass can never chain two new edges — exactly one hop per pass</text></svg>"
+    }
+  }
+}

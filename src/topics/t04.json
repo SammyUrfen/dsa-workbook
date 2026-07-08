@@ -1,0 +1,267 @@
+{
+  "tag": "m05",
+  "week": "Week 2 · Module 05",
+  "title": "Linked List",
+  "priority": "attack",
+  "summary": "Linked-list problems are almost never about the data structure — they are **pointer choreography**: can you juggle 2–3 pointers without dropping a node, losing the head, or welding a cycle? A Microsoft OA staple, and the whole topic reduces to about five reusable maneuvers you can drill into muscle memory.",
+  "notes": [
+    {
+      "heading": "Pointer choreography — what these problems really test",
+      "body": "A linked-list question is almost never about the data structure — it is about **pointer choreography**. The list is a thin excuse to test whether you can juggle two or three pointers without dropping a node, losing the head, or accidentally welding the list into a cycle. That is exactly why it is a **Microsoft interview staple**: it fits a short Codility slot and grades cleanly — either your pointers are right, or the list is visibly broken.\n\n> [!ANALOGY]\n> Picture the list as train cars coupled front-to-back on a track. You can only look forward, only walk forward, and each pointer variable is one hand holding one coupling. Every problem in this module is: re-couple the cars into a new order without letting any car roll away. A node no pointer is holding is *gone* — unreachable, leaked, unrecoverable.\n\nReach for the linked-list toolbox when you see:\n\n- The input is a singly-linked list and you must **reverse**, **reorder**, **merge**, or **remove** nodes — anything that rewires `next` pointers.\n- You need the **middle**, the **k-th from the end**, or to **detect/locate a cycle** in $O(1)$ extra space → fast/slow (tortoise & hare) pointers.\n- The prompt says **in-place** or **$O(1)$ space** — that rules out copying to an array and forces pointer surgery.\n- You must process **two sorted lists together** or splice sublists → dummy-node stitching.\n- Phrases like *without knowing the length*, *one pass*, or *constant memory* on a list are dead giveaways for the two-pointer family.\n\n> [!KEY]\n> The whole topic reduces to about **five reusable maneuvers**: reverse a run of nodes, walk with a dummy, find the middle, race fast/slow, and stitch two lists together. Once those are muscle memory, most list problems fall in under five minutes — and the hard ones turn out to be these same primitives glued together."
+    },
+    {
+      "heading": "The reversal primitive: save, flip, walk, walk",
+      "body": "Reversal is the single most important primitive in this module — you will write this exact loop inside a dozen different problems. Three pointers walk the list together: `prev` trails, `cur` leads, and `nxt` keeps a grip on the rest of the list *before* you clobber `cur->next`.\n\n```cpp\nstruct ListNode {\n    int val;\n    ListNode* next;\n    ListNode(int x) : val(x), next(nullptr) {}\n};\n\n// ---- In-place reversal (the single most important primitive) ----\n// Walk the list, flipping each node's next pointer to point backwards.\n// prev trails, cur leads, nxt saves the rest before we clobber cur->next.\nListNode* reverse(ListNode* head) {\n    ListNode* prev = nullptr;\n    ListNode* cur  = head;\n    while (cur) {\n        ListNode* nxt = cur->next; // 1. stash the rest of the list\n        cur->next = prev;          // 2. reverse this link\n        prev = cur;                // 3. advance prev\n        cur = nxt;                 // 4. advance cur\n    }\n    return prev; // prev is the new head (old tail)\n}\n```\n\nMemorize it as a four-beat chant: **save, flip, walk prev, walk cur.**\n\n[[fig:m05-reverse-step]]\n\n> [!EXAMPLE]\n> Trace on `1→2→3`:\n> - start: `prev = ∅`, `cur = 1`\n> - iter 1: save `nxt=2`, flip `1→∅`; now `prev=1, cur=2`\n> - iter 2: save `nxt=3`, flip `2→1`; now `prev=2, cur=3`\n> - iter 3: save `nxt=∅`, flip `3→2`; now `prev=3, cur=∅` — loop ends\n> - return `prev` → node 3, and the list reads `3→2→1`.\n\n> [!PITFALL]\n> The #1 reversal bug: writing `cur->next = prev` **before** stashing `cur->next` into `nxt`. The instant you flip the link, the unvisited suffix becomes unreachable. If your reversed list mysteriously contains one node, this is why — save first, flip second."
+    },
+    {
+      "heading": "The dummy node: never special-case the head",
+      "body": "Half of all list bugs come from one special case: *the head itself might change*. Delete the first node, merge two lists, reverse the first block of k — suddenly `head` is not the head anymore, and your code sprouts `if (cur == head)` branches everywhere.\n\nThe fix costs one line: allocate a fake node **in front of** the list. Now every real node — including the old head — has a node before it, so the exact same unlink move works everywhere. At the end you return `dummy.next`, which is the true head no matter what surgery happened.\n\n```cpp\n// ---- Dummy-node skeleton (deletion / merging / building output) ----\nListNode* templateWithDummy(ListNode* head) {\n    ListNode dummy(0);        // fake node BEFORE the head\n    dummy.next = head;\n    ListNode* prev = &dummy;  // prev always points at the node before \"cur\"\n    ListNode* cur  = head;\n    while (cur) {\n        // ... decide to keep or unlink cur ...\n        // to delete cur:  prev->next = cur->next; cur = cur->next;\n        // to keep   cur:  prev = cur;             cur = cur->next;\n    }\n    return dummy.next;        // head may have changed — this is why we used dummy\n}\n```\n\n[[fig:m05-dummy-delete]]\n\n> [!KEY]\n> Ask one question before coding: **can the first node be deleted, moved, or replaced?** If yes — dummy node, no exceptions. If the head is guaranteed to survive (find the middle, detect a cycle), you can skip it.\n\n> [!EXAM]\n> When you *build* an output list (merge, add-two-numbers), start from a stack-allocated `ListNode dummy(0)` and append via a `tail` pointer. The empty-output edge case then handles itself: `dummy.next` is simply `nullptr`. No `if (!result)` gymnastics under time pressure."
+    },
+    {
+      "heading": "Fast/slow pointers: the tortoise and the hare",
+      "body": "One pointer takes two steps for every single step of the other. This tiny trick answers questions that *look* like they need the length of the list — without ever counting:\n\n- **Middle:** when `fast` runs out of road, `slow` has covered exactly half the distance — it is standing on the middle node.\n- **Cycle:** if the list loops, `fast` enters the cycle and starts lapping `slow`. The gap between them shrinks by exactly one node per step, so they *must* collide — no jumping over. (Finding the cycle's *entry* is Deep Dive 1.)\n- **k-th from the end:** a cousin — give the front pointer a head start of `k` steps, then move both at the same speed; when the front one hits the end, the back one is `k` from the end.\n\n```cpp\n// ---- Fast/slow: find middle (slow lands on 2nd middle for even length) ----\nListNode* middle(ListNode* head) {\n    ListNode* slow = head;\n    ListNode* fast = head;\n    while (fast && fast->next) {\n        slow = slow->next;\n        fast = fast->next->next;\n    }\n    return slow;\n}\n```\n\n[[fig:m05-fastslow-middle]]\n\n> [!PITFALL]\n> The guard must be `while (fast && fast->next)` — **check `fast` first**. Short-circuit evaluation bails out before `fast->next` dereferences null. On even-length lists `fast` genuinely becomes `nullptr` mid-flight, so `while (fast->next)` alone is a guaranteed crash.\n\nEven-length lists have *two* middles, and your guard decides which one `slow` lands on:\n\n| guard | slow ends on (even length) |\n|---|---|\n| `while (fast && fast->next)` | the **second** middle |\n| `while (fast->next && fast->next->next)` | the node **before** the split |\n\nPick deliberately: splitting a list in half (Reorder List, merge sort on lists) wants the *before-the-split* version; a plain **return the middle node** wants the first."
+    },
+    {
+      "heading": "Hard problems are easy primitives glued together",
+      "body": "Here is the secret the Hard-tagged problems do not want you to know: they are almost never new algorithms. They are two or three of the maneuvers above, run in sequence:\n\n- **Palindrome Linked List** = find middle + reverse the second half + walk two pointers comparing.\n- **Reorder List** = find middle + reverse the second half + weave the halves alternately (Deep Dive 2).\n- **Reverse Nodes in k-Group** = dummy + count-ahead + the reversal loop, once per block (Deep Dive 4).\n- **Merge k Sorted Lists** = merge-two-lists, upgraded with a min-heap or divide-and-conquer.\n\n> [!INTUITION]\n> When a list problem looks scary, do not hunt for a clever algorithm — hunt for a **decomposition**. Ask: which of my five maneuvers, in what order, produces this transformation? Each phase is easy on its own; the *seams* between phases (splitting, re-stitching, terminating tails) are where you spend your care.\n\n> [!EXAM]\n> This decomposition is exactly what Microsoft-style Codility mediums reward. Reorder List is three easy functions in a trench coat. In a timed slot, write the plan as a comment first — `// 1. middle  2. reverse  3. weave` — then fill in each block. The comment doubles as your checklist for the final dry run."
+    },
+    {
+      "heading": "Pitfalls, edge cases, and how to narrate",
+      "body": "Five bugs account for nearly every wrong submission in this module:\n\n- **Losing the rest of the list** — always stash `cur->next` in a temp *before* overwriting it. The #1 reversal bug.\n- **Null dereference** — fast/slow guards must be `while (fast && fast->next)`, with `fast` checked first.\n- **Unhandled head change** — if the first node can be deleted or moved, use a dummy. Forgetting it forces ugly `if (head == target)` special cases.\n- **Wrong middle on even length** — pick your guard deliberately (see the table in the fast/slow section).\n- **Accidental cycles** — after rewiring, some tail's `next` must end at `nullptr`, or you have built a loop.\n\n**Edge cases to name out loud before coding:** empty list (`head == nullptr`), single node, two nodes, and — for k-group / nth-from-end — `k` or `n` equal to the full list length.\n\nHow to narrate in an interview (this scores points by itself):\n\n1. Restate the binding constraint: *it says $O(1)$ space, so no array copy — pointer manipulation it is.*\n2. Name the pattern: *this is find-middle plus reverse plus merge*, or *this is Floyd's algorithm.*\n3. **Draw the pointers.** Sketch `prev / cur / nxt` boxes and move them by hand for one iteration — it catches off-by-ones and shows the interviewer your reasoning.\n4. State complexity unprompted: nearly everything here is $O(n)$ time, $O(1)$ space — say so.\n\n> [!WARNING]\n> An accidental cycle is the sneakiest failure mode because *nothing crashes* — traversal just never ends and the judge reports **TLE**, not a wrong answer. If a list solution times out, suspect a rewiring step that never terminated a tail with `nullptr` before you suspect your complexity.\n\n> [!EXAM]\n> Before submitting, dry-run your final code on a **two-node list**. That size exposes most pointer bugs — head handling, null guards, tail termination — in about 30 seconds. Cheapest insurance you will ever buy in an OA."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Middle of the Linked List",
+      "url": "https://leetcode.com/problems/middle-of-the-linked-list/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Fast/slow pointers — the cleanest possible introduction; `slow` lands on the middle."
+    },
+    {
+      "name": "Reverse Linked List",
+      "url": "https://leetcode.com/problems/reverse-linked-list/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The reversal primitive — know it iteratively **and** recursively."
+    },
+    {
+      "name": "Linked List Cycle",
+      "url": "https://leetcode.com/problems/linked-list-cycle/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Floyd detection: do `fast` and `slow` ever meet?"
+    },
+    {
+      "name": "Merge Two Sorted Lists",
+      "url": "https://leetcode.com/problems/merge-two-sorted-lists/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Dummy-node stitching of two lists — build the output off `dummy.next`."
+    },
+    {
+      "name": "Remove Duplicates from Sorted List",
+      "url": "https://leetcode.com/problems/remove-duplicates-from-sorted-list/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Unlink adjacent equal nodes; only advance `cur` after the value truly changes."
+    },
+    {
+      "name": "Remove Nth Node From End of List",
+      "url": "https://leetcode.com/problems/remove-nth-node-from-end-of-list/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Two pointers a gap of `n` apart; the dummy handles removing the head itself."
+    },
+    {
+      "name": "Palindrome Linked List",
+      "url": "https://leetcode.com/problems/palindrome-linked-list/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Find middle, reverse the second half, compare — the $O(1)$-space composition."
+    },
+    {
+      "name": "Linked List Cycle II",
+      "url": "https://leetcode.com/problems/linked-list-cycle-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Floyd part 2: find the *entry* node of the cycle (see Deep Dive 1)."
+    },
+    {
+      "name": "Odd Even Linked List",
+      "url": "https://leetcode.com/problems/odd-even-linked-list/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Weave two sublists by index parity, then join odd-tail to even-head."
+    },
+    {
+      "name": "Reorder List",
+      "url": "https://leetcode.com/problems/reorder-list/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Middle + reverse + merge — three primitives in one problem (see Deep Dive 2)."
+    },
+    {
+      "name": "Copy List with Random Pointer",
+      "url": "https://leetcode.com/problems/copy-list-with-random-pointer/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Interleave-clone trick for $O(1)$ extra space (see Deep Dive 3)."
+    },
+    {
+      "name": "Add Two Numbers",
+      "url": "https://leetcode.com/problems/add-two-numbers/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Dummy node + carry propagation across two lists of digits."
+    },
+    {
+      "name": "Reverse Nodes in k-Group",
+      "url": "https://leetcode.com/problems/reverse-nodes-in-k-group/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Reverse fixed-size blocks and re-stitch them cleanly (see Deep Dive 4)."
+    },
+    {
+      "name": "Merge k Sorted Lists",
+      "url": "https://leetcode.com/problems/merge-k-sorted-lists/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Min-heap or divide-and-conquer merge — also drills heaps, a gap of yours."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Linked List Cycle II (Floyd's algorithm)** — A list may contain a cycle. Detect it and return the exact node where the cycle *begins*, using $O(1)$ extra space.",
+      "url": "https://leetcode.com/problems/linked-list-cycle-ii/",
+      "tag": "floyd-cycle",
+      "answer": "**Why naive fails.** A hash set of visited nodes finds the cycle in $O(n)$ time — but $O(n)$ space. The interview twist is always *$O(1)$ space*, which kills the set outright.\n\n**Phase 1 — detection.** Move `slow` by 1 and `fast` by 2. No cycle → `fast` falls off the end. Cycle → `fast` enters the loop and closes in on `slow` from behind: the gap shrinks by exactly 1 node per step, so a collision is *guaranteed* — it cannot jump over.\n\n**Phase 2 — the genuinely clever part.** Let `a` = distance from head to the cycle entry, `b` = distance from the entry to the meeting point, `c` = cycle length.\n\n[[fig:m05-floyd-entry]]\n\nAt the moment of collision:\n\n- slow travelled $a + b$\n- fast travelled $a + b + k \\cdot c$ for some $k \\ge 1$ (it lapped the cycle $k$ times)\n- fast went exactly twice as far: $2(a+b) = a+b+k\\cdot c \\implies a+b = k\\cdot c \\implies a = k\\cdot c - b$\n\n> [!KEY]\n> $k\\cdot c - b$ is precisely the *forward* walking distance from the meeting point back around to the entry. So the head is `a` steps from the entry — and the meeting point is **also** effectively `a` steps from the entry. **Reset one pointer to head, advance both one step at a time, and they collide exactly at the entry.** No arithmetic at runtime; the equation is baked into the walk.\n\n```cpp\nListNode* detectCycle(ListNode* head) {\n    ListNode *slow = head, *fast = head;\n    while (fast && fast->next) {\n        slow = slow->next;\n        fast = fast->next->next;\n        if (slow == fast) {              // collision => cycle exists\n            ListNode* p = head;\n            while (p != slow) {          // a == k*c - b, so they meet at entry\n                p = p->next;\n                slow = slow->next;\n            }\n            return p;                    // the cycle's entry node\n        }\n    }\n    return nullptr;                      // fast hit the end => no cycle\n}\n```\n\n**Complexity:** $O(n)$ time, $O(1)$ space.\n\n**What generalizes:** the $a = k\\cdot c - b$ derivation *is* the interview — be ready to reproduce it on a whiteboard. The same collision argument powers **Find the Duplicate Number** (treat the array as a linked list via `i → nums[i]`) and loop detection in iterated functions."
+    },
+    {
+      "q": "**Reorder List** — Rearrange `1→2→3→4→5` into `1→5→2→4→3` (first, last, second, second-last, …) in-place, $O(1)$ extra space.",
+      "url": "https://leetcode.com/problems/reorder-list/",
+      "tag": "compose-primitives",
+      "answer": "**Why naive fails.** You cannot walk backwards in a singly-linked list, so *grab the last node* costs $O(n)$ every time → $O(n^2)$ total. Copying node pointers into a vector works in $O(n)$ time but spends $O(n)$ space — the elegant answer needs none.\n\n> [!INTUITION]\n> The target order interleaves the first half (forward) with the second half (*backward*). You cannot walk backward — but you can **make** the second half walk forward by reversing it. The problem dissolves into three primitives you already own.\n\n**The decomposition:**\n\n1. **Find the middle** with fast/slow (the *before-the-split* variant).\n2. **Reverse the second half** — your memorized four-beat loop.\n3. **Weave the two halves alternately**, taking one node from each.\n\n```cpp\nvoid reorderList(ListNode* head) {\n    if (!head || !head->next) return;\n    // 1. middle: slow ends at the start of the second half\n    ListNode *slow = head, *fast = head;\n    while (fast->next && fast->next->next) { slow = slow->next; fast = fast->next->next; }\n    // 2. reverse the second half\n    ListNode *second = slow->next; slow->next = nullptr; // split\n    ListNode *prev = nullptr;\n    while (second) { ListNode* n = second->next; second->next = prev; prev = second; second = n; }\n    second = prev;                        // head of reversed second half\n    // 3. weave the two lists together\n    ListNode* first = head;\n    while (second) {\n        ListNode *f = first->next, *s = second->next;\n        first->next = second; second->next = f;\n        first = f; second = s;\n    }\n}\n```\n\nWatch the seams: `slow->next = nullptr` terminates the first half (no accidental cycle), and the weave saves *both* next-pointers (`f`, `s`) before rewiring — the same save-before-clobber discipline as the reversal loop.\n\n**Complexity:** $O(n)$ time, $O(1)$ space.\n\n**What generalizes:** hard list problems are usually 2–3 easy primitives glued together — *recognizing the decomposition is the skill*. The same middle+reverse combo drives Palindrome Linked List; the weave reappears in merge problems."
+    },
+    {
+      "q": "**Copy List with Random Pointer** — Deep-copy a list where each node has a `next` pointer and a `random` pointer to an arbitrary node (or null), using $O(1)$ extra space beyond the output.",
+      "url": "https://leetcode.com/problems/copy-list-with-random-pointer/",
+      "tag": "interleave-clone",
+      "answer": "**Why naive fails.** A hash map `original → clone` plus a second pass to wire `random` pointers is clean — but costs $O(n)$ extra space for the map. The interviewer wants $O(1)$ extra (not counting the output itself).\n\n> [!INTUITION]\n> The hash map only exists to answer one question: *given an original node, where is its clone?* If you park every clone **immediately after** its original, the list's own structure answers it: the clone is just `original->next`. The map becomes a pointer hop.\n\n**The three passes:**\n\n1. **Interleave:** insert each clone right after its original — `A → A' → B → B' → C → C'`.\n2. **Wire randoms in place:** for each original `cur`, set `cur->next->random = cur->random->next`. Read it slowly: `cur->next` is *the clone*; `cur->random` is some original; `cur->random->next` is **that original's clone**. Pure pointer arithmetic, no map.\n3. **Unweave:** detach the copy and restore the original list.\n\n[[fig:m05-interleave-clone]]\n\n```cpp\nNode* copyRandomList(Node* head) {\n    if (!head) return nullptr;\n    for (Node* cur = head; cur; cur = cur->next->next) {   // 1. interleave clones\n        Node* clone = new Node(cur->val);\n        clone->next = cur->next;\n        cur->next = clone;\n    }\n    for (Node* cur = head; cur; cur = cur->next->next)      // 2. set random via neighbours\n        if (cur->random) cur->next->random = cur->random->next;\n    Node dummy(0); Node* copyTail = &dummy;                 // 3. detach the copy\n    for (Node* cur = head; cur; cur = cur->next) {\n        copyTail->next = cur->next;\n        copyTail = copyTail->next;\n        cur->next = cur->next->next;                        // restore original\n    }\n    return dummy.next;\n}\n```\n\nNote the loop steps: passes 1 and 2 hop **two** nodes (`cur->next->next`) to skip the clones; pass 3 hops one because it re-links as it goes. And do not skip step 3's restoration — leaving the original list mangled is an automatic follow-up question.\n\n**Complexity:** $O(n)$ time, $O(1)$ extra space.\n\n**What generalizes:** when you need a *node → partner* mapping, consider encoding it in the structure itself instead of a hash map. This *use the geometry as the map* idea also shows up in in-place array encodings (storing two values per slot)."
+    },
+    {
+      "q": "**Reverse Nodes in k-Group** — Reverse every consecutive block of `k` nodes; if fewer than `k` nodes remain at the end, leave them untouched.",
+      "url": "https://leetcode.com/problems/reverse-nodes-in-k-group/",
+      "tag": "block-reversal",
+      "answer": "**Why it is tricky.** Reversing one sublist is your memorized primitive — the pain is *reconnecting* the reversed block's two ends to the surrounding list, correctly, over and over. Off-by-one errors and lost tails are everywhere, and the very first block changes the head.\n\n**The anchor scheme.** Keep a `groupPrev` pointer: the node just *before* the current block (initially the dummy).\n\n1. From `groupPrev`, look ahead `k` nodes to confirm a full group exists — if not, stop and leave the tail as is.\n2. Reverse the `k` nodes. The node that *was* first in the group becomes the **tail** of the reversed block.\n3. Re-stitch: `groupPrev->next` → new block head (`kth`); then `groupPrev` advances to the old-first node for the next round.\n\n> [!KEY]\n> The elegant move: initialize `prev = groupNext` (the node *after* the group) instead of `nullptr`. Then the reversal loop links the block's tail straight into the rest of the list **as a side effect** — no separate re-linking step, no dangling tail, no accidental cycle.\n\n```cpp\nListNode* reverseKGroup(ListNode* head, int k) {\n    ListNode dummy(0); dummy.next = head;\n    ListNode* groupPrev = &dummy;\n    while (true) {\n        // find the k-th node from groupPrev\n        ListNode* kth = groupPrev;\n        for (int i = 0; i < k && kth; i++) kth = kth->next;\n        if (!kth) break;                         // fewer than k left -> done\n        ListNode* groupNext = kth->next;         // first node AFTER the group\n        // reverse the group, initializing prev to groupNext so the block\n        // links straight into the rest of the list\n        ListNode* prev = groupNext;\n        ListNode* cur  = groupPrev->next;\n        while (cur != groupNext) {\n            ListNode* nxt = cur->next;\n            cur->next = prev;\n            prev = cur;\n            cur = nxt;\n        }\n        ListNode* oldFirst = groupPrev->next;    // now the block's tail\n        groupPrev->next = kth;                   // kth is the block's new head\n        groupPrev = oldFirst;                     // advance anchor for next group\n    }\n    return dummy.next;\n}\n```\n\nThe dummy handles the first group changing the head; the `for` look-ahead handles the `<k` remainder; the `while (cur != groupNext)` bound reverses *exactly* `k` links.\n\n**Complexity:** $O(n)$ time — each node is visited once by the look-ahead and once by the reversal — and $O(1)$ space.\n\n**What generalizes:** the *anchor + look-ahead + primitive + re-stitch* frame works for any block-wise list transformation (swap pairs is just `k = 2`). Test it with `k` equal to the list length and `k = 1` — both seams must survive."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "You must **delete the k-th node from the end** of a singly-linked list in *one pass* and $O(1)$ space. Which technique fits?",
+      "options": [
+        "Reverse the list, delete the k-th node from the front, then reverse back.",
+        "Store every node in a hash map keyed by index, then jump to index `len - k`.",
+        "Two pointers a gap of `k` apart, advanced together until the front one hits the end.",
+        "Fast/slow pointers where fast moves two steps per one step of slow."
+      ],
+      "answer": 2,
+      "explanation": "The gap trick: give the front pointer a `k`-step head start, then move both at the same speed; when the front hits the end, the back pointer sits just before the target — one pass, no extra memory. Reversing twice is three passes; the hash map is $O(n)$ space; fast-at-2x finds the *middle*, not the k-th from the end.",
+      "tag": "pattern"
+    },
+    {
+      "q": "In the reversal loop, you accidentally write `cur->next = prev;` **before** `ListNode* nxt = cur->next;`. What actually happens?",
+      "options": [
+        "`nxt` now stores `prev`, so the unvisited suffix is lost and the loop terminates early with a mostly-missing list.",
+        "Nothing — pointers are copied by value, so the order of the two lines is irrelevant.",
+        "Immediate segfault on the first iteration for any non-empty list.",
+        "It only breaks on even-length lists."
+      ],
+      "answer": 0,
+      "explanation": "Flipping first clobbers the only reference to the rest of the list: `nxt` then reads the *already-flipped* pointer (i.e. `prev`), so `cur` walks backwards/stops instead of forward. On `1→2→3` you would return just `1` with `2→3` leaked. No crash, no length-dependence — just silent data loss, which is why *save, flip, walk, walk* order matters.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "Why must the fast/slow guard be `while (fast && fast->next)` rather than just `while (fast->next)`?",
+      "options": [
+        "No reason — `fast` can never become null inside the loop.",
+        "On even-length lists `fast` ends up as `nullptr`, so `fast->next` would dereference null and crash.",
+        "Without it, `slow` overshoots the middle by one on odd-length lists.",
+        "The shorter guard makes the loop infinite."
+      ],
+      "answer": 1,
+      "explanation": "With an even number of nodes, `fast = fast->next->next` eventually lands `fast` on `nullptr`. The next guard evaluation would compute `nullptr->next` — undefined behavior. Checking `fast` first exploits short-circuit evaluation to bail out safely. Odd lists happen to be fine, which makes this bug extra sneaky: it passes half your mental tests.",
+      "tag": "null-guard"
+    },
+    {
+      "q": "Running the standard reversal loop on `1→2→3`: after exactly **two** iterations, what are `prev` and `cur`?",
+      "options": [
+        "`prev` = node 1 (list `1→∅`), `cur` = node 2",
+        "`prev` = node 3 (list `3→2→1`), `cur` = `nullptr`",
+        "`prev` = node 2 with `2→3` still intact, `cur` = node 3",
+        "`prev` = node 2 (list `2→1→∅`), `cur` = node 3"
+      ],
+      "answer": 3,
+      "explanation": "Iteration 1: stash `nxt=2`, flip `1→∅`, so `prev=1, cur=2`. Iteration 2: stash `nxt=3`, flip `2→1`, so `prev=2, cur=3` — and the reversed prefix reads `2→1→∅`. Option C forgets that the flip already happened; option B describes the state after *three* iterations (the full reversal).",
+      "tag": "trace"
+    },
+    {
+      "q": "Reorder List solved as *find middle → reverse second half → weave alternately*. Total complexity?",
+      "options": [
+        "$O(n)$ time, $O(1)$ space",
+        "$O(n \\log n)$ time, $O(1)$ space",
+        "$O(n)$ time, $O(n)$ space",
+        "$O(n^2)$ time, $O(1)$ space"
+      ],
+      "answer": 0,
+      "explanation": "Each phase is a single linear walk: middle is $O(n)$, reversing half is $O(n)$, weaving is $O(n)$ — three passes is still $O(n)$, and every phase only uses a constant number of pointer variables. $O(n^2)$ is what the naive *fetch the last node repeatedly* approach costs; $O(n)$ space is the vector-of-pointers shortcut this decomposition exists to avoid.",
+      "tag": "complexity"
+    },
+    {
+      "q": "In Floyd's algorithm, after `slow` and `fast` collide you reset one pointer to `head` and advance **both by one step**. Why do they meet exactly at the cycle's entry?",
+      "options": [
+        "Because the collision point is always the entry node itself.",
+        "Because `slow` has gone around the cycle exactly once when they collide.",
+        "Because head→entry distance `a` equals `k·c − b`, which is exactly the meeting point's forward distance to the entry.",
+        "Because `fast` moves twice as fast, it is forced to stop at the entry."
+      ],
+      "answer": 2,
+      "explanation": "From *fast travelled twice slow's distance*: $2(a+b)=a+b+k\\cdot c$, so $a = k\\cdot c - b$. Walking $a$ steps from the head reaches the entry; walking $a = k\\cdot c - b$ steps forward from the meeting point also lands on the entry (it completes the laps). The collision point is generally *not* the entry (A), and neither pointer counts laps at runtime — the equation does the work.",
+      "tag": "floyd"
+    },
+    {
+      "q": "In which of these situations can you safely **skip the dummy node**?",
+      "options": [
+        "Deleting every node whose value equals `x` — the head might match.",
+        "Finding the middle node of the list.",
+        "Merging two sorted lists into one output list.",
+        "Removing the n-th node from the end, where `n` may equal the length."
+      ],
+      "answer": 1,
+      "explanation": "Finding the middle does zero rewiring — the head cannot change, so there is nothing for a dummy to protect. In every other option the first node can be deleted or the output head is unknown until runtime, which is precisely the dummy's job: give the head a `prev` and return `dummy.next` at the end.",
+      "tag": "dummy"
+    }
+  ],
+  "figures": {
+    "m05-reverse-step": {
+      "caption": "Mid-reversal snapshot: nodes **1** and **2** already point backwards (accent), `cur` is about to flip node **3**, and `nxt` keeps a grip on node **4** so the suffix is never lost.",
+      "svg": "<svg viewBox=\"0 0 660 190\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Reversal in progress: prev, cur and nxt pointers mid-list\">\n<text x=\"20\" y=\"24\" class=\"t-bold\">reverse: mid-loop, nodes 1 and 2 already flipped</text>\n<text x=\"34\" y=\"72\" text-anchor=\"middle\" class=\"t-muted t-mono\">&#8709;</text>\n<rect x=\"60\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"82\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text>\n<rect x=\"170\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"192\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text>\n<rect x=\"280\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"302\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text>\n<rect x=\"390\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"412\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">4</text>\n<line x1=\"56\" y1=\"66\" x2=\"46\" y2=\"66\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n<line x1=\"166\" y1=\"66\" x2=\"112\" y2=\"66\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n<line x1=\"328\" y1=\"66\" x2=\"382\" y2=\"66\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"192\" y1=\"146\" x2=\"192\" y2=\"98\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n<text x=\"192\" y=\"170\" text-anchor=\"middle\" class=\"t-sm t-accent\">prev</text>\n<line x1=\"302\" y1=\"146\" x2=\"302\" y2=\"98\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/>\n<text x=\"302\" y=\"170\" text-anchor=\"middle\" class=\"t-sm t-accent2\">cur</text>\n<line x1=\"412\" y1=\"146\" x2=\"412\" y2=\"98\" class=\"s-muted\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<text x=\"412\" y=\"170\" text-anchor=\"middle\" class=\"t-sm t-muted\">nxt</text>\n<text x=\"510\" y=\"60\" class=\"t-sm t-muted\">next step:</text>\n<text x=\"510\" y=\"84\" class=\"t-sm t-accent2\">cur-&gt;next = prev</text>\n</svg>"
+    },
+    "m05-dummy-delete": {
+      "caption": "Deleting the **head** with a dummy in front: the head has a `prev` like every other node, so the ordinary bypass `prev->next = cur->next` (green arc) works — no special case. Return `dummy.next`.",
+      "svg": "<svg viewBox=\"0 0 660 210\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Dummy node lets you delete the head with the normal unlink move\">\n<text x=\"20\" y=\"24\" class=\"t-bold\">deleting the head &#8212; the dummy gives it a prev</text>\n<path d=\"M 62 84 Q 190 36 316 84\" class=\"f-none s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/>\n<rect x=\"40\" y=\"90\" width=\"44\" height=\"44\" class=\"f-panel2 s-muted\" stroke-dasharray=\"4 3\"/>\n<text x=\"62\" y=\"118\" text-anchor=\"middle\" class=\"t-mono t-muted\">D</text>\n<rect x=\"170\" y=\"90\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/>\n<text x=\"192\" y=\"118\" text-anchor=\"middle\" class=\"t-mono t-bad\">1</text>\n<rect x=\"300\" y=\"90\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"322\" y=\"118\" text-anchor=\"middle\" class=\"t-mono\">2</text>\n<rect x=\"430\" y=\"90\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"452\" y=\"118\" text-anchor=\"middle\" class=\"t-mono\">3</text>\n<line x1=\"88\" y1=\"112\" x2=\"166\" y2=\"112\" class=\"s-muted\" stroke-width=\"2\" stroke-dasharray=\"4 3\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"218\" y1=\"112\" x2=\"296\" y2=\"112\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"348\" y1=\"112\" x2=\"426\" y2=\"112\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<text x=\"62\" y=\"160\" text-anchor=\"middle\" class=\"t-sm t-muted\">dummy</text>\n<text x=\"192\" y=\"160\" text-anchor=\"middle\" class=\"t-sm t-bad\">delete me</text>\n<text x=\"322\" y=\"160\" text-anchor=\"middle\" class=\"t-sm t-muted\">new head</text>\n<text x=\"20\" y=\"194\" class=\"t-sm t-ok t-mono\">prev-&gt;next = cur-&gt;next;  return dummy.next;</text>\n</svg>"
+    },
+    "m05-fastslow-middle": {
+      "caption": "Fast/slow race on `1→2→3→4→5`: after step *t*, `slow` is at node *t+1* and `fast` at node *2t+1* (labels s0/f0, s1, s2/f1, f2). When `fast` can no longer take two steps, `slow` stands on the **middle**.",
+      "svg": "<svg viewBox=\"0 0 660 230\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Fast pointer moves two steps per one step of slow; slow ends on the middle node\">\n<text x=\"20\" y=\"24\" class=\"t-bold\">fast moves 2, slow moves 1 &#8212; slow ends on the middle</text>\n<text x=\"82\" y=\"52\" text-anchor=\"middle\" class=\"t-sm t-muted\">s0 f0</text>\n<text x=\"192\" y=\"52\" text-anchor=\"middle\" class=\"t-sm t-muted\">s1</text>\n<text x=\"302\" y=\"52\" text-anchor=\"middle\" class=\"t-sm t-muted\">s2 f1</text>\n<text x=\"522\" y=\"52\" text-anchor=\"middle\" class=\"t-sm t-muted\">f2</text>\n<rect x=\"60\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"82\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n<rect x=\"170\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"192\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">2</text>\n<rect x=\"280\" y=\"64\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"302\" y=\"92\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text>\n<rect x=\"390\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"412\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">4</text>\n<rect x=\"500\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-accent2\"/>\n<text x=\"522\" y=\"92\" text-anchor=\"middle\" class=\"t-mono t-accent2\">5</text>\n<line x1=\"108\" y1=\"86\" x2=\"166\" y2=\"86\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"218\" y1=\"86\" x2=\"276\" y2=\"86\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"328\" y1=\"86\" x2=\"386\" y2=\"86\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"438\" y1=\"86\" x2=\"496\" y2=\"86\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"302\" y1=\"156\" x2=\"302\" y2=\"118\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n<text x=\"302\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-accent\">slow (middle)</text>\n<line x1=\"522\" y1=\"156\" x2=\"522\" y2=\"118\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/>\n<text x=\"522\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-accent2\">fast</text>\n<text x=\"20\" y=\"214\" class=\"t-sm t-muted\">guard: while (fast &amp;&amp; fast-&gt;next) &#8212; stop when fast cannot take two more steps</text>\n</svg>"
+    },
+    "m05-floyd-entry": {
+      "caption": "Floyd phase 2: `a` = head→entry, `b` = entry→meeting point (red). Since $a = k\\cdot c - b$, walking one pointer from **head** and one from **meet**, both one step at a time, makes them collide exactly at the **entry** node.",
+      "svg": "<svg viewBox=\"0 0 660 320\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A linked list with a tail leading into a cycle; slow and fast meet inside the cycle, then one pointer restarts from head to find the entry\">\n<text x=\"20\" y=\"24\" class=\"t-bold\">Floyd: collide inside the cycle, then find the entry</text>\n<circle cx=\"60\" cy=\"150\" r=\"17\" class=\"f-panel s-line\"/>\n<circle cx=\"170\" cy=\"150\" r=\"17\" class=\"f-panel s-line\"/>\n<circle cx=\"280\" cy=\"150\" r=\"17\" class=\"f-accent-soft s-accent\"/>\n<circle cx=\"380\" cy=\"50\" r=\"17\" class=\"f-panel s-line\"/>\n<circle cx=\"480\" cy=\"150\" r=\"17\" class=\"f-bad-soft s-bad\"/>\n<circle cx=\"380\" cy=\"250\" r=\"17\" class=\"f-panel s-line\"/>\n<line x1=\"81\" y1=\"150\" x2=\"149\" y2=\"150\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"191\" y1=\"150\" x2=\"259\" y2=\"150\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<path d=\"M 282 129 A 100 100 0 0 1 359 52\" class=\"f-none s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<path d=\"M 401 52 A 100 100 0 0 1 478 129\" class=\"f-none s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<path d=\"M 478 171 A 100 100 0 0 1 401 248\" class=\"f-none s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<path d=\"M 359 248 A 100 100 0 0 1 282 171\" class=\"f-none s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<text x=\"60\" y=\"192\" text-anchor=\"middle\" class=\"t-sm t-muted\">head</text>\n<text x=\"115\" y=\"136\" text-anchor=\"middle\" class=\"t-sm t-accent\">a</text>\n<text x=\"300\" y=\"72\" class=\"t-sm t-accent2\">b</text>\n<text x=\"508\" y=\"155\" class=\"t-sm t-bad\">meet</text>\n<text x=\"240\" y=\"200\" text-anchor=\"end\" class=\"t-sm t-accent\">entry</text>\n<text x=\"20\" y=\"300\" class=\"t-sm t-muted\">phase 2: reset one pointer to head; both walk 1 step at a time &#8212; they collide at entry (a = k&#183;c &#8722; b)</text>\n</svg>"
+    },
+    "m05-interleave-clone": {
+      "caption": "The interleaving clone: every copy `A'` sits right after its original `A`, so `original->next` **is** the clone. The clone's random comes for free: `A'.random = A.random->next` (bottom arc mirrors the top arc, one `->next` later).",
+      "svg": "<svg viewBox=\"0 0 660 250\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Clones interleaved into the original list so random pointers can be copied without a hash map\">\n<text x=\"20\" y=\"24\" class=\"t-bold\">clones woven in: A&#8594;A'&#8594;B&#8594;B'&#8594;C&#8594;C'</text>\n<path d=\"M 62 94 Q 250 30 456 92\" class=\"f-none s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/>\n<text x=\"480\" y=\"50\" class=\"t-sm t-accent2\">A.random = C</text>\n<rect x=\"40\" y=\"100\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"62\" y=\"128\" text-anchor=\"middle\" class=\"t-mono\">A</text>\n<rect x=\"140\" y=\"100\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"162\" y=\"128\" text-anchor=\"middle\" class=\"t-mono t-accent\">A'</text>\n<rect x=\"240\" y=\"100\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"262\" y=\"128\" text-anchor=\"middle\" class=\"t-mono\">B</text>\n<rect x=\"340\" y=\"100\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"362\" y=\"128\" text-anchor=\"middle\" class=\"t-mono t-accent\">B'</text>\n<rect x=\"440\" y=\"100\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n<text x=\"462\" y=\"128\" text-anchor=\"middle\" class=\"t-mono\">C</text>\n<rect x=\"540\" y=\"100\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n<text x=\"562\" y=\"128\" text-anchor=\"middle\" class=\"t-mono t-accent\">C'</text>\n<line x1=\"88\" y1=\"122\" x2=\"136\" y2=\"122\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"188\" y1=\"122\" x2=\"236\" y2=\"122\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"288\" y1=\"122\" x2=\"336\" y2=\"122\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"388\" y1=\"122\" x2=\"436\" y2=\"122\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<line x1=\"488\" y1=\"122\" x2=\"536\" y2=\"122\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/>\n<path d=\"M 162 148 Q 350 224 556 150\" class=\"f-none s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n<text x=\"330\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-accent\">A'.random = A.random-&gt;next = C'</text>\n</svg>"
+    }
+  }
+}

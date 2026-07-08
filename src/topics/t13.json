@@ -1,0 +1,279 @@
+{
+  "tag": "m13",
+  "week": "Week 7 · Module 13",
+  "title": "Dynamic Programming II",
+  "priority": "attack",
+  "summary": "You already know 1D/2D counting DP — this module is about the **shape of the state**. Three families cover almost every \"hard\" OA DP: **grid DP** (walk a matrix), **two-sequence DP** (align two strings), and **interval DP** (solve a range by splitting it). Nail the state definition for each and Trilogy's hard-DP round and Flipkart's string hards collapse into templates.",
+  "notes": [
+    {
+      "heading": "One skill, three shapes of state",
+      "body": "In DP I you learned the mechanics: memoize a recursion, or fill a table bottom-up. This module is about something subtler — the **shape of the state**. Almost every \"hard\" DP that shows up in OAs is one of three families, and each family has a signature you can spot in the problem statement before you write a line of code.\n\n| You see... | Family | State |\n|---|---|---|\n| A grid/matrix, moves restricted (right/down, 4-neighbours), \"count paths\" / \"cheapest path\" | **Grid DP** | `dp[i][j]` = best answer *reaching* cell `(i,j)` |\n| Two strings/arrays to compare, align, or edit into each other | **Two-sequence DP** | `dp[i][j]` = answer for prefixes `a[0..i-1]`, `b[0..j-1]` |\n| Contiguous substrings + a range property (palindrome), or \"split / merge / burst\" where operation ORDER matters | **Interval DP** | `dp[i][j]` = answer for the range `[i..j]` |\n| \"Largest square/rectangle of 1s in a binary matrix\" | **Matrix DP** | `dp[i][j]` = best shape with bottom-right corner at `(i,j)` |\n\n> [!KEY]\n> The whole game is one sentence: **define the state so that the answer at a cell depends only on already-computed cells**, then pick a loop order that respects those dependencies. Grid → row-major. Two-sequence → prefix order. Interval → by increasing length. Everything else in this module is a corollary of that sentence.\n\n> [!EXAM]\n> Calibrate your effort: Trilogy's hard-DP round **loves Maximal Square** (it's the 🎯 in this ladder — memorize it cold), and Flipkart's 3-hards-in-90-minutes format is where Edit Distance and interval DP show up. Microsoft's Codility mediums stay closer to the grid-path family."
+    },
+    {
+      "heading": "Form A — grid path DP: ask each cell who stepped into it",
+      "body": "Start with the friendliest family. You're standing on a grid, you may only step **right or down**, and you want the cheapest route from top-left to bottom-right. Ask each cell one question: *\"who could have stepped into me?\"* Only the cell **above** and the cell to the **left**. So if you already know the best cost to reach those two, the best cost to reach `(i,j)` is decided:\n\n[[fig:m13-grid-deps]]\n\n```cpp\n// Min path sum from top-left to bottom-right (Unique Paths / Min Path Sum share this shape)\nint minPathSum(vector<vector<int>>& g) {\n    int m = g.size(), n = g[0].size();\n    // dp[i][j] = best cost to REACH cell (i,j)\n    vector<vector<int>> dp(m, vector<int>(n, 0));\n    for (int i = 0; i < m; i++)\n        for (int j = 0; j < n; j++) {\n            if (i == 0 && j == 0) dp[i][j] = g[0][0];          // start\n            else {\n                int up   = (i > 0) ? dp[i-1][j] : INT_MAX;      // came from above\n                int left = (j > 0) ? dp[i][j-1] : INT_MAX;      // came from left\n                dp[i][j] = g[i][j] + min(up, left);\n            }\n        }\n    return dp[m-1][n-1];\n    // For COUNTING paths: dp[i][j] = dp[i-1][j] + dp[i][j-1], base dp[0][0]=1.\n    // Space: can compress to a single row (1D) since you only look up/left.\n}\n```\n\nRow-major order (`for i, for j`) is exactly right here: by the time you compute `dp[i][j]`, the row above is fully done and the cell to your left in this row is done. Dependencies are always ready — no cleverness required.\n\n> [!INTUITION]\n> Don't think \"explore paths forward\". Think **backwards at each cell**: \"the last step into me came from up or from left, so my answer is my own cost plus the better of those two finished answers.\" That one flip of perspective turns an exponential path search into $O(mn)$ table-filling.\n\n> [!EXAMPLE]\n> Grid `[[1,3,1],[1,5,1],[4,2,1]]`. Top row accumulates: `1,4,5`. Left column: `1,2,6`. Then `dp[1][1] = 5 + min(4,2) = 7`, `dp[1][2] = 1 + min(5,7) = 6`, `dp[2][1] = 2 + min(7,6) = 8`, `dp[2][2] = 1 + min(6,8) = 7`. Answer **7** (path 1→3→1→1→1).\n\n> [!NOTE]\n> Two knobs turn this one template into the first four ladder problems: swap `min` for `+` and you're **counting** paths (Unique Paths); an obstacle just forces `dp[i][j] = 0` (Unique Paths II); a jagged grid like Triangle is the same idea with two children instead of up/left. And since you only read the previous row, a single rolling 1D row gives $O(n)$ space."
+    },
+    {
+      "heading": "Form B — two-sequence DP: the LCS skeleton",
+      "body": "New shape: **two** strings, and you must relate them — find their longest common subsequence, or edit one into the other. The state is a pair of prefixes: `dp[i][j]` = answer for the first `i` characters of `a` and the first `j` characters of `b`. The table is `(m+1) × (n+1)` because row 0 and column 0 represent the **empty prefix** — the free base case that makes the recurrence clean.\n\n```cpp\n// Longest Common Subsequence — the parent of edit distance, min-delete, etc.\nint lcs(const string& a, const string& b) {\n    int m = a.size(), n = b.size();\n    // dp[i][j] = LCS of a[0..i-1] and b[0..j-1]. Row/col 0 = empty prefix = 0.\n    vector<vector<int>> dp(m+1, vector<int>(n+1, 0));\n    for (int i = 1; i <= m; i++)\n        for (int j = 1; j <= n; j++) {\n            if (a[i-1] == b[j-1])\n                dp[i][j] = 1 + dp[i-1][j-1];          // match: extend diagonal\n            else\n                dp[i][j] = max(dp[i-1][j], dp[i][j-1]); // skip one char\n        }\n    return dp[m][n];\n}\n```\n\nThe recurrence is a decision about the **last characters** of the two prefixes. If they match, they belong together in the answer: take `1 +` the diagonal (both prefixes shrink). If they don't, one of them is dead weight: drop `a`'s last char (look up) or drop `b`'s last char (look left), and keep the better result.\n\n[[fig:m13-lcs-table]]\n\n> [!ANALOGY]\n> This table is exactly what a `diff` tool computes. Walking the grid is aligning the two strings: a diagonal move pairs two characters up, a vertical or horizontal move skips a character in one string. LCS finds the longest pairing; edit distance (deep dive below) finds the cheapest walk.\n\n> [!PITFALL]\n> The #1 bug in this family: `dp[i][j]` talks about **prefixes of length** `i` and `j`, so the characters being compared are `a[i-1]` and `b[j-1]` — not `a[i]`. Pick the `+1`-padded convention, write the comment `// dp[i][j] = answer for a[0..i-1], b[0..j-1]` at the top, and stay consistent. Mixing 0-indexed strings with 1-indexed DP silently corrupts the whole table.\n\n> [!KEY]\n> Learn the **disguises** — they turn hards into one-liners: \"minimum deletions to make two strings equal\" is `m + n - 2*LCS(a,b)` (Delete Operation for Two Strings), and \"longest palindromic subsequence\" is `LCS(s, reverse(s))`. Spotting a reduction to LCS saves you from deriving a recurrence from scratch under the clock."
+    },
+    {
+      "heading": "Form C — interval DP: solve ranges by length",
+      "body": "Third shape, and the one you've genuinely never done: the answer for a **contiguous range** `[i..j]` is built from smaller ranges inside it. The signature phrases: \"split the array/string optimally\", \"merge stones\", \"burst balloons\" — anywhere the **order of operations** matters, so a greedy left-to-right pass can't work.\n\nThe template picks a split point `k` and combines the two halves plus the cost of the operation that joins them:\n\n```cpp\n// Generic interval DP: answer(i,j) built from smaller ranges. Iterate by LENGTH.\nint intervalDP(int n) {\n    vector<vector<int>> dp(n, vector<int>(n, 0));\n    for (int len = 2; len <= n; len++)          // grow interval length\n        for (int i = 0; i + len - 1 < n; i++) { // left endpoint\n            int j = i + len - 1;                 // right endpoint\n            dp[i][j] = INT_MAX;                  // or 0, depends on problem\n            for (int k = i; k < j; k++)          // split point / last op\n                dp[i][j] = min(dp[i][j],\n                               dp[i][k] + dp[k+1][j] + cost(i, k, j));\n        }\n    return dp[0][n-1];\n}\n```\n\n[[fig:m13-interval-order]]\n\n> [!KEY]\n> The **outer loop is the interval length**. A range of length `len` only ever depends on strictly shorter ranges, so solving all length-2 ranges, then all length-3, and so on guarantees `dp[i][k]` and `dp[k+1][j]` are ready when you read them. Length is the \"time axis\" of interval DP.\n\n> [!PITFALL]\n> The most common interval-DP mistake: writing a plain row-major `for i, for j` like grid DP. Then `dp[k+1][j]` lives in a **later row** you haven't touched yet — you read zeros/garbage and get a wrong answer with no crash to warn you. If your interval DP returns something suspiciously small, check the loop order first.\n\n> [!INTUITION]\n> When the split-point recurrence doesn't obviously work (Burst Balloons!), flip the question: instead of \"what operation happens **first**?\", ask \"what operation happens **last** in this range?\". The last operation sees a fixed, known environment, which is exactly what decouples the two halves. That reframe is the deep-dive below, and it's the reusable trick behind Minimum Cost to Cut a Stick and Matrix Chain Multiplication."
+    },
+    {
+      "heading": "The palindrome table: interval DP's little sibling",
+      "body": "Palindromes get their own mini-family because three ladder problems share one table. The observation: `s[i..j]` is a palindrome **iff** `s[i] == s[j]` *and* the inside `s[i+1..j-1]` is already a palindrome. The inner range is shorter, so this is interval DP with a boolean table — and there's a slick iteration order that avoids the explicit `len` loop:\n\n```cpp\nint countSubstrings(string s) {\n    int n = s.size(), cnt = 0;\n    vector<vector<bool>> dp(n, vector<bool>(n, false));\n    for (int i = n - 1; i >= 0; i--)          // i decreasing so i+1 is done\n        for (int j = i; j < n; j++) {          // j increasing so j-1 is done\n            if (s[i] == s[j] && (j - i < 2 || dp[i+1][j-1])) {\n                dp[i][j] = true;               // len 0/1/2 need no inner check\n                cnt++;\n            }\n        }\n    return cnt;\n}\n```\n\nRunning `i` downward and `j` upward means `dp[i+1][j-1]` (one row below, one column left) is always finished — same guarantee as iterating by length, fewer lines.\n\n> [!PITFALL]\n> The `j - i < 2` guard is load-bearing. A single character (`j == i`) and two equal adjacent characters (`j - i == 1`) are palindromes with **no inside to check** — and `dp[i+1][j-1]` would be an inverted/out-of-range read for them. Short-circuit *before* touching the inner cell, or you'll read garbage for every length-1 and length-2 substring.\n\n> [!NOTE]\n> One table, three problems: count the `true` cells → **Palindromic Substrings**; track the max `j - i + 1` where `dp[i][j]` is true → **Longest Palindromic Substring**; switch the booleans to lengths on `[i..j]` (or just run LCS against the reverse) → **Longest Palindromic Subsequence**. All $O(n^2)$ time and space.\n\n> [!EXAM]\n> For Longest Palindromic Substring specifically, **expand-around-center** is also $O(n^2)$ time but $O(1)$ space and less code — try each of the $2n-1$ centers. In an OA, write whichever you can produce fastest without bugs; the table generalizes better, the expansion is quicker to type."
+    },
+    {
+      "heading": "Pitfalls, space compression, and how to narrate DP",
+      "body": "The recurrences above are the easy 80%. Here's the 20% that actually costs points in OAs, plus the script for talking about DP in interviews.\n\n**The classic bugs, ranked by how often they bite:**\n\n- **Base rows/columns forgotten.** Edit distance needs `dp[i][0] = i` and `dp[0][j] = j` *before* the double loop. Grid counting needs the first row/column seeded to 1 — and to 0 past an obstacle. A wrong base case doesn't crash; it silently corrupts everything downstream.\n- **Prefix off-by-one.** `(m+1) × (n+1)` table, compare `a[i-1]` with `b[j-1]`. Every time.\n- **Interval order.** Outer loop = length (or `i` descending / `j` ascending). Never plain row-major.\n- **Maximal Square returns the area**, not the side. `return side * side;` — people lose a full test case on this exact line.\n\n> [!WARNING]\n> **Space compression has one trap.** Grid and two-sequence DP only read the previous row, so a rolling 1D array gives $O(n)$ space — but LCS and edit distance also read the **diagonal** `dp[i-1][j-1]`, which the rolling row overwrites. Stash it in a temp (`int prev = dp[j-1]` *before* updating) or you'll compute nonsense. If the follow-up comes, mention the temp — that detail is what the interviewer is fishing for.\n\n> [!KEY] The five-step narration\n> Say it in this order, out loud, before coding: (1) \"Let me define the state — `dp[i][j]` means…\" (2) \"The recurrence: I get here from a smaller subproblem by…\" (3) \"Base cases are…\" (4) \"Iteration order, so dependencies are ready, is…\" (5) \"Complexity is…\". Stating the state *first* signals seniority — and it physically stops you from coding a wrong recurrence, because a wrong state won't survive step 2.\n\n> [!EXAM]\n> Under time pressure, **always write the $O(mn)$ 2D table first and get it correct**. Only compress to $O(n)$ if there's time left over. A correct 2D solution scores full marks; a buggy 1D one scores zero. This trade is never close."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Unique Paths",
+      "url": "https://leetcode.com/problems/unique-paths/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Grid **counting** DP: `dp[i][j] = dp[i-1][j] + dp[i][j-1]`; seed the top row and left column with 1."
+    },
+    {
+      "name": "Unique Paths II",
+      "url": "https://leetcode.com/problems/unique-paths-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Same recurrence, but an obstacle forces `dp = 0` — and watch the edge case where the **start cell** itself is blocked."
+    },
+    {
+      "name": "Minimum Path Sum",
+      "url": "https://leetcode.com/problems/minimum-path-sum/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "`min` instead of count — the Form A template verbatim."
+    },
+    {
+      "name": "Triangle",
+      "url": "https://leetcode.com/problems/triangle/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Grid DP on a jagged triangle; **bottom-up** is cleanest — each cell takes `min` of its two children."
+    },
+    {
+      "name": "Maximal Square",
+      "url": "https://leetcode.com/problems/maximal-square/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The **Trilogy STAR**: `dp = 1 + min(up, left, diagonal)`; return `side * side`, not the side. Memorize this."
+    },
+    {
+      "name": "Longest Common Subsequence",
+      "url": "https://leetcode.com/problems/longest-common-subsequence/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "The parent two-sequence recurrence: match → `1 + diagonal`, else `max(up, left)`."
+    },
+    {
+      "name": "Edit Distance",
+      "url": "https://leetcode.com/problems/edit-distance/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Insert/delete/replace = right/up/diagonal; base rows `dp[i][0]=i`, `dp[0][j]=j`. A classic Microsoft/Flipkart favourite."
+    },
+    {
+      "name": "Delete Operation for Two Strings",
+      "url": "https://leetcode.com/problems/delete-operation-for-two-strings/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "LCS in disguise: answer = `m + n - 2*LCS(a, b)`."
+    },
+    {
+      "name": "Longest Palindromic Substring",
+      "url": "https://leetcode.com/problems/longest-palindromic-substring/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Interval-style boolean `dp[i][j]`; expand-around-center also works ($O(n^2)$ time, $O(1)$ space)."
+    },
+    {
+      "name": "Palindromic Substrings",
+      "url": "https://leetcode.com/problems/palindromic-substrings/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Count instead of longest — the same boolean `dp[i][j]` table, `cnt++` on every true cell."
+    },
+    {
+      "name": "Longest Palindromic Subsequence",
+      "url": "https://leetcode.com/problems/longest-palindromic-subsequence/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Interval DP on `[i..j]` — or the shortcut: LCS of `s` and `reverse(s)`."
+    },
+    {
+      "name": "Maximal Rectangle",
+      "url": "https://leetcode.com/problems/maximal-rectangle/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Matrix DP + histogram/monotonic stack per row; the tougher sibling of Maximal Square."
+    },
+    {
+      "name": "Burst Balloons",
+      "url": "https://leetcode.com/problems/burst-balloons/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "The canonical **last-operation** interval DP: pad with 1s, pick the balloon popped LAST in `(i, j)`. Genuinely hard, huge payoff."
+    },
+    {
+      "name": "Minimum Cost to Cut a Stick",
+      "url": "https://leetcode.com/problems/minimum-cost-to-cut-a-stick/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Interval DP over **cut positions** — the same skeleton as Burst Balloons, applied to sorted cuts."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Maximal Square** — given a binary matrix, find the largest square containing only 1s and return its **area**. Why does the recurrence take the *min* of three neighbours?",
+      "url": "https://leetcode.com/problems/maximal-square/",
+      "tag": "matrix-dp",
+      "answer": "**Naive, and why it dies.** For every cell, try every square size and verify all its cells: $O((mn)\\cdot\\min(m,n)^2)$. On a big matrix that times out — and it also throws away everything you learned from neighbouring cells.\n\n> [!INTUITION]\n> The whole trick is the state definition: `dp[i][j]` = **side length of the largest all-1 square whose bottom-right corner sits at `(i,j)`**. Anchoring the square at its bottom-right corner is what makes the recurrence *local* — a square ending here is just three slightly smaller squares ending at my three neighbours, plus me.\n\nIf `matrix[i][j] == 1`, a square of side `s` can end here only if squares of side `s-1` end at the cell **above**, the cell to the **left**, and the **diagonal** neighbour — those three squares tile everything except the current cell:\n\n```cpp\nif (matrix[i][j] == '1')\n    dp[i][j] = 1 + min({ dp[i-1][j], dp[i][j-1], dp[i-1][j-1] });\nelse\n    dp[i][j] = 0;   // a 0 cell can be no square's corner\n```\n\n**Why `min` and not `max`?** A square is only as strong as its weakest supporting corner. Suppose up allows side 3 but the diagonal only allows side 1 — then the top-left region of your would-be 4×4 has a hole, and all you can *guarantee* is a 2×2. The `min` takes the largest side that **all three** neighbours can support, and the `+1` adds the current cell.\n\n[[fig:m13-square-min3]]\n\nFull solution — note the `+1` border trick that deletes all the `i-1`/`j-1` boundary checks:\n\n```cpp\nint maximalSquare(vector<vector<char>>& m) {\n    int R = m.size(), C = m[0].size(), best = 0;\n    vector<vector<int>> dp(R+1, vector<int>(C+1, 0)); // +1 border avoids i-1/j-1 checks\n    for (int i = 1; i <= R; i++)\n        for (int j = 1; j <= C; j++)\n            if (m[i-1][j-1] == '1') {\n                dp[i][j] = 1 + min({dp[i-1][j], dp[i][j-1], dp[i-1][j-1]});\n                best = max(best, dp[i][j]);\n            }\n    return best * best;\n}\n```\n\n**Complexity:** time $O(mn)$, space $O(mn)$, compressible to $O(n)$ with a rolling row plus one temp for the diagonal.\n\n> [!PITFALL]\n> The problem asks for the **area**. Track the max *side* while filling, return `best * best`. Losing a test on the very last line is a rite of passage — skip it.\n\n**What generalizes:** \"anchor the shape at a corner cell and express it via neighbours\" is the move behind Maximal Rectangle (per-row histograms), Count Square Submatrices, and largest-plus-sign problems."
+    },
+    {
+      "q": "**Edit Distance** — minimum number of insert / delete / replace operations to turn string `a` into string `b`. Where do the three options in the recurrence come from, and what are the base cases?",
+      "url": "https://leetcode.com/problems/edit-distance/",
+      "tag": "two-sequence",
+      "answer": "Let `dp[i][j]` = edit distance between the prefixes `a[0..i-1]` and `b[0..j-1]`, on the usual `(m+1) × (n+1)` padded table. Stare at the **last characters** of the two prefixes:\n\n- If `a[i-1] == b[j-1]`: they pair up for free — the problem reduces to `dp[i-1][j-1]`.\n- Otherwise you must perform exactly one of three operations, then solve what remains:\n  - **replace** `a[i-1]` with `b[j-1]`: `1 + dp[i-1][j-1]`\n  - **delete** `a[i-1]`: `1 + dp[i-1][j]`\n  - **insert** `b[j-1]` at the end of `a`: `1 + dp[i][j-1]`\n\n```cpp\nif (a[i-1] == b[j-1]) dp[i][j] = dp[i-1][j-1];\nelse dp[i][j] = 1 + min({ dp[i-1][j-1],   // replace\n                          dp[i-1][j],     // delete from a\n                          dp[i][j-1] });  // insert into a\n```\n\n> [!KEY]\n> Each of the three edits maps to exactly one **direction in the table**: diagonal = match-or-replace, up = delete, left = insert. The table is an *alignment grid*, and edit distance is the cheapest monotone path through it — the same grid a `diff` tool walks. Once you hold that picture, you can re-derive the recurrence in ten seconds instead of memorizing it.\n\n> [!PITFALL]\n> **The base cases are the trap**, not the recurrence: `dp[i][0] = i` (turning a length-`i` prefix into the empty string costs `i` deletions) and `dp[0][j] = j` (building `b`'s prefix from nothing costs `j` insertions). Fill both *before* the double loop. Forget them and every cell downstream inherits the corruption — with no crash to tip you off.\n\nFill row-major like LCS; the answer is `dp[m][n]`.\n\n**Complexity:** time $O(mn)$, space $O(mn)$ → $O(n)$ with a rolling row **plus a temp for the diagonal** (it gets overwritten before you'd read it).\n\n**What generalizes:** the \"decide the fate of the last character, reduce to a smaller prefix pair\" move powers One Edit Distance, Delete Operation for Two Strings, and regex/wildcard matching — same table, different transition menu."
+    },
+    {
+      "q": "**Palindromic Substrings** — count how many substrings of `s` are palindromes. How do you beat the $O(n^3)$ brute force, and why is the iteration order `i` **down**, `j` **up**?",
+      "url": "https://leetcode.com/problems/palindromic-substrings/",
+      "tag": "palindrome-table",
+      "answer": "**Naive:** enumerate all $O(n^2)$ substrings and palindrome-check each in $O(n)$ — that's $O(n^3)$, too slow and too wasteful: checking `\"abcba\"` re-verifies `\"bcb\"`, which re-verifies `\"c\"`.\n\n> [!INTUITION]\n> Recursion in one line: `s[i..j]` is a palindrome **iff** `s[i] == s[j]` **and** `s[i+1..j-1]` is one. The inner range is strictly shorter — so if you compute short ranges before long ones, every lookup is already answered. That's interval DP with booleans.\n\nThe elegant iteration order: run `i` from the bottom **up** and `j` from `i` **rightward**. Then `dp[i+1][j-1]` (one row below, one column earlier) is always done — no explicit length loop needed:\n\n```cpp\nint countSubstrings(string s) {\n    int n = s.size(), cnt = 0;\n    vector<vector<bool>> dp(n, vector<bool>(n, false));\n    for (int i = n - 1; i >= 0; i--)          // i decreasing so i+1 is done\n        for (int j = i; j < n; j++) {          // j increasing so j-1 is done\n            if (s[i] == s[j] && (j - i < 2 || dp[i+1][j-1])) {\n                dp[i][j] = true;               // len 0/1/2 need no inner check\n                cnt++;\n            }\n        }\n    return cnt;\n}\n```\n\n> [!PITFALL]\n> The subtle bit is `j - i < 2`. A single character (`j == i`) and two equal adjacent characters (`j - i == 1`) are palindromes **without consulting the inner cell** — and for them `dp[i+1][j-1]` is an inverted or out-of-range read. The short-circuit `||` must fire *before* the table lookup. Move that guard after the lookup and you read garbage for every short substring.\n\n**Complexity:** time and space $O(n^2)$.\n\n**What generalizes:** this exact table, unchanged, answers **Longest Palindromic Substring** (track the max `j - i + 1` over true cells) — and its \"lengths instead of booleans\" cousin is Longest Palindromic Subsequence. One table, three ladder problems."
+    },
+    {
+      "q": "**Burst Balloons** — bursting balloon `i` earns `nums[i-1] * nums[i] * nums[i+1]` with neighbours evaluated *at burst time*; maximize total coins. Why does the natural \"burst first\" DP fail, and what fixes it?",
+      "url": "https://leetcode.com/problems/burst-balloons/",
+      "tag": "interval-dp",
+      "answer": "**Why the obvious DP fails.** Try \"which balloon do I burst *first* in this range?\" — bursting it splits the array into two halves, but the halves **aren't independent**: after the left half loses balloons, the right half's boundary neighbour changes, so `dp` on raw halves is meaningless. This is the rare problem where the natural recursion is simply wrong, not just slow.\n\n> [!KEY] Reverse the question\n> Ask instead: **\"which balloon `k` is burst LAST in the open interval `(i, j)`?\"** If `k` is last, then at the moment it pops, everything strictly between `i` and `j` is already gone — so its live neighbours are exactly the *boundaries* `nums[i]` and `nums[j]`, which never change. Fixing the last operation is what decouples the two sides.\n\n[[fig:m13-burst-last]]\n\nPad the array with `1` at both ends. Define `dp[i][j]` = max coins from bursting **everything strictly between** `i` and `j` (exclusive boundaries):\n\n```cpp\n// dp[i][j] = max coins bursting all balloons strictly between i and j (exclusive ends)\nfor (int len = 2; len <= n - 1; len++)          // distance between boundaries\n    for (int i = 0; i + len <= n - 1; i++) {\n        int j = i + len;\n        for (int k = i + 1; k < j; k++)          // k = last balloon in (i,j)\n            dp[i][j] = max(dp[i][j],\n                dp[i][k] + dp[k][j]              // sub-intervals, already solved\n                + nums[i] * nums[k] * nums[j]);  // k bursts against fixed i, j\n    }\n// answer: dp[0][n-1] over the padded array\n```\n\nBecause `k` dies last, everything in `(i, k)` is burst while `k` is still alive and acting as a wall, and likewise for `(k, j)` — so `dp[i][k]` and `dp[k][j]` are fully independent subproblems. That independence is the *entire* reason interval DP works here.\n\n**Complexity:** $O(n^2)$ intervals × $O(n)$ choices of `k` = time $O(n^3)$, space $O(n^2)$.\n\n> [!EXAM]\n> The \"condition on the LAST operation\" reframe is directly reusable: **Minimum Cost to Cut a Stick** (which cut do I make first on `[i..j]`? — equivalently, condition on the segment boundaries) and **Matrix Chain Multiplication** (which multiplication happens last?) are the same skeleton. If a Flipkart hard says \"burst/merge/split with order-dependent cost\", type this template."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA problem reads: \"Stone piles sit in a row; you repeatedly merge two *adjacent* piles, paying their combined weight; minimize the total cost of merging everything.\" Which DP family fits, and what is the state?",
+      "options": [
+        "Grid path DP — `dp[i][j]` = cheapest way to reach pile `(i, j)`",
+        "Two-sequence DP — `dp[i][j]` over prefixes of the pile array and its reverse",
+        "Interval DP — `dp[i][j]` = min cost to merge the contiguous range `[i..j]`, split at `k`, iterate by length",
+        "0/1 knapsack — `dp[w]` = min cost using piles of total weight `w`"
+      ],
+      "answer": 2,
+      "explanation": "Merges are on *contiguous* ranges and the ORDER of merges changes the cost — the two signatures of interval DP. The final merge of `[i..j]` joins some `[i..k]` and `[k+1..j]`, giving `dp[i][j] = min over k of dp[i][k] + dp[k+1][j] + sum(i..j)`. Grid DP needs a lattice walk, two-sequence DP needs two strings to align, and knapsack needs independent take/skip items — none of which describe adjacent merging.",
+      "tag": "pattern"
+    },
+    {
+      "q": "You take the interval DP template but replace the outer `for (len = 2; ...)` loop with a plain row-major scan: `for (i = 0..n-1) for (j = i+1..n-1)`. What actually happens?",
+      "options": [
+        "`dp[k+1][j]` is read from rows below `i` that haven't been computed yet, so you silently combine garbage/zero values into a wrong answer",
+        "Nothing — row-major order still computes every dependency before it's needed",
+        "The program crashes with an out-of-bounds access on `dp[k+1][j]`",
+        "It's still correct but the complexity degrades from O(n²) to O(n³)"
+      ],
+      "answer": 0,
+      "explanation": "In row-major order, `dp[i][k]` is fine (same row, earlier `j`), but `dp[k+1][j]` with `k+1 > i` lives in a LATER row — still holding its initial value. The indices are all in range, so nothing crashes: you just get a quietly wrong (usually too-small) answer. That silence is exactly why loop order is the #1 interval-DP bug. Iterating by length guarantees both halves are strictly shorter and therefore done.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "Burst Balloons on an array of `n` balloons (after padding with 1s at both ends): what is the time complexity of the interval DP solution?",
+      "options": [
+        "$O(n^2)$",
+        "$O(n^2 \\log n)$",
+        "$O(2^n)$",
+        "$O(n^3)$"
+      ],
+      "answer": 3,
+      "explanation": "There are $O(n^2)$ intervals `(i, j)`, and each one tries every possible last balloon `k` strictly inside it — $O(n)$ choices. $O(n^2) \\times O(n) = O(n^3)$. $O(n^2)$ forgets the inner split loop; $O(2^n)$ is the memoryless brute force the DP exists to kill.",
+      "tag": "complexity"
+    },
+    {
+      "q": "You run the LCS template on `a = \"ab\"`, `b = \"ba\"`. What is `dp[2][2]` (the final answer)?",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "2, but only if you iterate column-major instead of row-major"
+      ],
+      "answer": 1,
+      "explanation": "The common *subsequences* of \"ab\" and \"ba\" are \"a\" and \"b\" — you can't have both, because they appear in opposite orders. So LCS = 1. Trace: dp[1][1] (a vs b) = 0, dp[1][2] (a vs ba) = 1, dp[2][1] (ab vs b) = 1, dp[2][2]: 'b' != 'a' so max(dp[1][2], dp[2][1]) = 1. Iteration order between row- and column-major never changes the values — dependencies are ready either way.",
+      "tag": "trace"
+    },
+    {
+      "q": "In the palindrome table condition `s[i] == s[j] && (j - i < 2 || dp[i+1][j-1])`, what is the `j - i < 2` check really doing?",
+      "options": [
+        "It's a micro-optimization; removing it keeps the code correct but slower",
+        "It restricts the table to even-length palindromes, which need special handling",
+        "It declares length-1 and length-2 substrings palindromes without reading `dp[i+1][j-1]`, which for them is an inverted/invalid inner range",
+        "It prevents integer overflow when `i` and `j` are both large"
+      ],
+      "answer": 2,
+      "explanation": "For `j == i` (one char) and `j - i == 1` (two equal adjacent chars) there is no \"inside\" to verify — and `dp[i+1][j-1]` would have `i+1 > j-1`, an inverted range holding meaningless (or out-of-range) data. The short-circuit `||` must fire first. It's correctness, not speed — so option A is the tempting trap.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "In edit distance, the base case is `dp[i][0] = i`. What does this encode?",
+      "options": [
+        "Turning the first `i` characters of `a` into the empty string costs exactly `i` deletions",
+        "Inserting `i` characters of `b` into an empty `a`",
+        "Replacing the first `i` characters of `a` in place",
+        "It's an arbitrary initialization; any non-negative value works"
+      ],
+      "answer": 0,
+      "explanation": "`dp[i][0]` compares a length-`i` prefix of `a` against the EMPTY prefix of `b`: the only way to get there is to delete all `i` characters, one operation each. (Its mirror, `dp[0][j] = j`, is the insertion story — option B describes that cell, not this one.) These bases are not decorative: every interior cell ultimately chains back to them, so a wrong base corrupts the whole table.",
+      "tag": "base-case"
+    },
+    {
+      "q": "Filling the Maximal Square table you reach a cell where `matrix[i][j] == '1'`, with neighbour values up = 3, left = 1, diagonal = 2. What is `dp[i][j]`?",
+      "options": [
+        "4",
+        "2",
+        "3",
+        "1"
+      ],
+      "answer": 1,
+      "explanation": "`dp[i][j] = 1 + min(3, 1, 2) = 1 + 1 = 2`. The left neighbour only supports a side-1 square, so however generous up and the diagonal are, the region to the left has a hole beyond side 1 — you can only guarantee a 2×2 ending here. Answer 4 is the `max` mistake; answer 3 averages; answer 1 forgets the `+1` for the current cell.",
+      "tag": "trace"
+    },
+    {
+      "q": "You compress LCS from a 2D table to one rolling 1D row to get $O(n)$ space. What extra care does the match case `1 + dp[i-1][j-1]` demand?",
+      "options": [
+        "None — the rolling row already holds both the up and left values you need",
+        "You must iterate `j` from right to left instead of left to right",
+        "Space compression is impossible for LCS; you need at least two full rows forever",
+        "Save the old `dp[j-1]` (last row's diagonal) into a temp *before* overwriting it, because the rolling update destroys it"
+      ],
+      "answer": 3,
+      "explanation": "In a rolling row, by the time you compute position `j`, slot `j-1` has already been overwritten with the CURRENT row's value — but the match case needs last row's `dp[i-1][j-1]`. Fix: keep `prev` holding the pre-overwrite value as you sweep. Option B is the trick for a different family (unbounded vs 0/1 knapsack); option C is false — one row plus one temp suffices. This exact temp is what interviewers listen for on the \"can you do O(n) space?\" follow-up.",
+      "tag": "space-compression"
+    }
+  ],
+  "figures": {
+    "m13-grid-deps": {
+      "caption": "**Grid path DP.** Left: the cost grid. Right: the dp table mid-fill — the highlighted cell needs only the two shaded, already-finished answers (up and left), so row-major order always works.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Grid DP: each cell takes the min of the cell above and the cell to the left\"><text x=\"20\" y=\"24\" class=\"t-bold\">dp[i][j] = g[i][j] + min(up, left)</text><rect x=\"40\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"62\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"86\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"108\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"132\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"154\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"40\" y=\"110\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"62\" y=\"138\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"86\" y=\"110\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"108\" y=\"138\" text-anchor=\"middle\" class=\"t-mono\">5</text><rect x=\"132\" y=\"110\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"154\" y=\"138\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"40\" y=\"156\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"62\" y=\"184\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"86\" y=\"156\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"108\" y=\"184\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"132\" y=\"156\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"154\" y=\"184\" text-anchor=\"middle\" class=\"t-mono\">1</text><text x=\"108\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-muted\">cost grid g</text><rect x=\"390\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"412\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"460\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"482\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"530\" y=\"64\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"552\" y=\"92\" text-anchor=\"middle\" class=\"t-mono\">5</text><rect x=\"390\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"412\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"460\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"482\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">7</text><rect x=\"530\" y=\"134\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"552\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"390\" y=\"204\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"412\" y=\"232\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"460\" y=\"204\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"482\" y=\"232\" text-anchor=\"middle\" class=\"t-mono\">8</text><rect x=\"530\" y=\"204\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"552\" y=\"232\" text-anchor=\"middle\" class=\"t-mono t-accent\">?</text><line x1=\"552\" y1=\"182\" x2=\"552\" y2=\"200\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><line x1=\"508\" y1=\"226\" x2=\"526\" y2=\"226\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><text x=\"482\" y=\"280\" text-anchor=\"middle\" class=\"t-sm t-muted\">dp table mid-fill: the ? cell asks up and left</text></svg>"
+    },
+    "m13-lcs-table": {
+      "caption": "**The LCS table** for `a = \"ace\"`, `b = \"abcde\"`. Row/column 0 are the empty-prefix bases. The final cell matches `'e' == 'e'`, so it takes **1 + the diagonal** (shaded); mismatch cells take the max of up and left.",
+      "svg": "<svg viewBox=\"0 0 660 360\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"LCS table for ace and abcde with the match diagonal highlighted\"><text x=\"20\" y=\"24\" class=\"t-bold\">LCS(\"ace\", \"abcde\") — a match extends the diagonal</text><text x=\"162\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-muted\">∅</text><text x=\"208\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-accent2\">a</text><text x=\"254\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-accent2\">b</text><text x=\"300\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-accent2\">c</text><text x=\"346\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-accent2\">d</text><text x=\"392\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-accent2\">e</text><text x=\"118\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">∅</text><text x=\"118\" y=\"162\" text-anchor=\"middle\" class=\"t-sm t-accent2\">a</text><text x=\"118\" y=\"208\" text-anchor=\"middle\" class=\"t-sm t-accent2\">c</text><text x=\"118\" y=\"254\" text-anchor=\"middle\" class=\"t-sm t-accent2\">e</text><rect x=\"140\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"162\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"186\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"208\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"232\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"254\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"278\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"300\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"324\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"346\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"370\" y=\"88\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"392\" y=\"116\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"140\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"162\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"186\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"208\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"232\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"254\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"278\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"300\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"324\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"346\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"370\" y=\"134\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"392\" y=\"162\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"140\" y=\"180\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"162\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"186\" y=\"180\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"208\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"232\" y=\"180\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"254\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"278\" y=\"180\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"300\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"324\" y=\"180\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"346\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"370\" y=\"180\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"392\" y=\"208\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"140\" y=\"226\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"162\" y=\"254\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"186\" y=\"226\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"208\" y=\"254\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"232\" y=\"226\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"254\" y=\"254\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"278\" y=\"226\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"300\" y=\"254\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"324\" y=\"226\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"346\" y=\"254\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"370\" y=\"226\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"392\" y=\"254\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><text x=\"20\" y=\"306\" class=\"t-sm\">match ('e'=='e'): dp[3][5] = 1 + dp[2][4] — one plus the shaded diagonal cell</text><text x=\"20\" y=\"332\" class=\"t-sm t-muted\">mismatch: dp[i][j] = max(up, left) — drop one character, keep the better prefix answer</text></svg>"
+    },
+    "m13-square-min3": {
+      "caption": "**Maximal Square.** Left: the largest all-1 square (side 3, outlined). Right: the dp table — the bottom-right corner of that square holds `1 + min(up, left, diagonal) = 1 + min(2,2,2) = 3`. The min is the weakest supporting corner.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Maximal Square: binary matrix with its largest square, and the dp table where each cell is one plus the min of three neighbours\"><text x=\"20\" y=\"24\" class=\"t-bold\">Maximal Square: dp = 1 + min(up, left, diagonal)</text><rect x=\"30\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"52\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"76\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"98\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"122\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"144\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"168\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"190\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-muted\">0</text><rect x=\"30\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"52\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"76\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"98\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"122\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"144\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"168\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"190\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"30\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"52\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"76\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"98\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"122\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"144\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"168\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"190\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"30\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"52\" y=\"222\" text-anchor=\"middle\" class=\"t-mono t-muted\">0</text><rect x=\"76\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"98\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"122\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"144\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"168\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"190\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"28\" y=\"54\" width=\"140\" height=\"140\" class=\"f-none s-accent\" stroke-width=\"2.5\"/><text x=\"121\" y=\"266\" text-anchor=\"middle\" class=\"t-sm t-muted\">largest all-1 square: side 3</text><rect x=\"400\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"422\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"446\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"468\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"492\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"514\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"538\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"560\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"400\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"422\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"446\" y=\"102\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"468\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"492\" y=\"102\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"514\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"538\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"560\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"400\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"422\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"446\" y=\"148\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"468\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"492\" y=\"148\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"514\" y=\"176\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><rect x=\"538\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"560\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"400\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"422\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"446\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"468\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"492\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"514\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"538\" y=\"194\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"560\" y=\"222\" text-anchor=\"middle\" class=\"t-mono\">3</text><text x=\"491\" y=\"266\" text-anchor=\"middle\" class=\"t-sm t-muted\">dp: 1 + min(2, 2, 2) = 3</text></svg>"
+    },
+    "m13-interval-order": {
+      "caption": "**Interval DP iteration order.** Solve every length-2 range first, then length-3, then length-4: each pass only reads answers from strictly shorter ranges, so every dependency is ready. Plain row-major order breaks this guarantee.",
+      "svg": "<svg viewBox=\"0 0 660 340\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Interval DP fill order: all length-2 ranges, then length-3, then length-4\"><text x=\"20\" y=\"24\" class=\"t-bold\">interval DP fill order: shorter ranges first</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">0</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">1</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">2</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">3</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">4</text><rect x=\"250\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"272\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">5</text><rect x=\"20\" y=\"116\" width=\"90\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"112\" y=\"116\" width=\"90\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"204\" y=\"116\" width=\"90\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"66\" y=\"136\" width=\"90\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"158\" y=\"136\" width=\"90\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"20\" y=\"178\" width=\"136\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"158\" y=\"178\" width=\"136\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"66\" y=\"198\" width=\"136\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"112\" y=\"218\" width=\"136\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"20\" y=\"260\" width=\"182\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"66\" y=\"280\" width=\"182\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><rect x=\"112\" y=\"300\" width=\"182\" height=\"14\" rx=\"4\" class=\"f-accent-soft s-accent\"/><text x=\"380\" y=\"132\" class=\"t-sm\">pass 1: all 5 len-2 ranges</text><text x=\"380\" y=\"204\" class=\"t-sm\">pass 2: all 4 len-3 (reads len-2)</text><text x=\"380\" y=\"286\" class=\"t-sm\">pass 3: all 3 len-4 (reads 2 &amp; 3)</text><line x1=\"620\" y1=\"116\" x2=\"620\" y2=\"308\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/></svg>"
+    },
+    "m13-burst-last": {
+      "caption": "**Burst Balloons' key reframe** on padded `[1,3,1,5,8,1]`. Choose `k` as the balloon burst *last* in `(i, j)`: when it pops, only the walls remain beside it, so `dp[i][k]` and `dp[k][j]` are fully independent.",
+      "svg": "<svg viewBox=\"0 0 660 250\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Burst Balloons: the last balloon k popped between fixed walls i and j splits the interval into two independent halves\"><text x=\"20\" y=\"24\" class=\"t-bold\">pick k = the LAST balloon popped in (i, j)</text><rect x=\"150\" y=\"48\" width=\"44\" height=\"44\" class=\"f-panel2 s-muted\"/><text x=\"172\" y=\"76\" text-anchor=\"middle\" class=\"t-mono t-muted\">1</text><rect x=\"212\" y=\"48\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"234\" y=\"76\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"274\" y=\"48\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"296\" y=\"76\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"336\" y=\"48\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"358\" y=\"76\" text-anchor=\"middle\" class=\"t-mono t-accent\">5</text><rect x=\"398\" y=\"48\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"420\" y=\"76\" text-anchor=\"middle\" class=\"t-mono\">8</text><rect x=\"460\" y=\"48\" width=\"44\" height=\"44\" class=\"f-panel2 s-muted\"/><text x=\"482\" y=\"76\" text-anchor=\"middle\" class=\"t-mono t-muted\">1</text><text x=\"172\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">i (wall)</text><text x=\"358\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-accent\">k (last)</text><text x=\"482\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-muted\">j (wall)</text><line x1=\"212\" y1=\"146\" x2=\"318\" y2=\"146\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"212\" y1=\"140\" x2=\"212\" y2=\"152\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"318\" y1=\"140\" x2=\"318\" y2=\"152\" class=\"s-ok\" stroke-width=\"2\"/><text x=\"265\" y=\"174\" text-anchor=\"middle\" class=\"t-sm t-ok\">dp[i][k]</text><line x1=\"398\" y1=\"146\" x2=\"442\" y2=\"146\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"398\" y1=\"140\" x2=\"398\" y2=\"152\" class=\"s-ok\" stroke-width=\"2\"/><line x1=\"442\" y1=\"140\" x2=\"442\" y2=\"152\" class=\"s-ok\" stroke-width=\"2\"/><text x=\"420\" y=\"174\" text-anchor=\"middle\" class=\"t-sm t-ok\">dp[k][j]</text><text x=\"20\" y=\"210\" class=\"t-sm\">k pops last, so its live neighbours are exactly the walls: coins = nums[i] * nums[k] * nums[j]</text><text x=\"20\" y=\"234\" class=\"t-sm t-muted\">the two halves can never touch each other — they are independent subproblems</text></svg>"
+    }
+  }
+}

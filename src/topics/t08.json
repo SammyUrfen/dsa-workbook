@@ -1,0 +1,267 @@
+{
+  "tag": "m08",
+  "week": "Week 4 · Module 08",
+  "title": "Heaps / Priority Queue",
+  "priority": "attack",
+  "summary": "A heap is an array that pretends to be a balanced tree so you can grab the smallest (or largest) element in $O(\\log n)$ — in C++ that's `std::priority_queue`. You've never used heaps, but four patterns cover ~90% of interview heap questions: **top-K**, **K-way merge**, **two-heaps running median**, and **greedy scheduling** — and Flipkart-style hards lean on them explicitly.",
+  "notes": [
+    {
+      "heading": "Why heaps exist — and when to grab one",
+      "body": "Sorting gives you the *full* order of $n$ elements for $O(n \\log n)$. But a huge family of problems never needs the full order — they only ever ask **\"what's the current extreme?\"**: the largest, the smallest, the most frequent, the most urgent. Paying for a full sort every time something changes is the naive trap. A **heap** (priority queue) is the data structure that answers exactly that one question, fast, even while elements keep arriving:\n\n- `push(x)` — $O(\\log n)$\n- `pop()` the extreme element — $O(\\log n)$\n- `top()` peek at the extreme — $O(1)$\n\n> [!ANALOGY]\n> A hospital ER triage queue. Patients arrive in any order; the desk always knows *who is most critical right now* without re-sorting the whole waiting room after every arrival. Nobody can ask \"who's 14th in line?\" — the queue only ever reveals the front. That's a heap: instant access to the extreme, nothing else.\n\nUnder the hood it's just an array with a mental tree drawn on top: element $i$'s children live at $2i+1$ and $2i+2$, its parent at $(i-1)/2$. The only rule (\"heap property\") is *parent beats children*. That's much weaker than sorted order — which is exactly why maintaining it is cheap.\n\n[[fig:m08-array-tree]]\n\nReach for a heap when you see any of these:\n\n- **\"K-th largest / smallest\", \"top K\", \"K most frequent\"** — and you don't need the items fully sorted.\n- You repeatedly **pull the current min/max while new elements keep arriving** (streaming, scheduling, simulation).\n- You're **merging several already-sorted lists** and want the next-smallest across all of them.\n- You need a **running median** (or other order statistic) over a growing stream.\n- A **greedy** algorithm keeps asking \"what's the largest / most-urgent thing available *right now*?\" — the heap answers in $O(\\log n)$ instead of $O(n)$.\n\n> [!KEY]\n> A heap does **not** let you search, index, or iterate in order. If you catch yourself wanting to look at the *middle* of the structure, a heap is the wrong tool. It answers exactly one question — \"what's the extreme?\" — and that's its superpower, not a limitation."
+    },
+    {
+      "heading": "The C++ incantations you must memorize",
+      "body": "You'll declare a `priority_queue` in the first 30 seconds of every heap problem, so these four declarations need to be muscle memory:\n\n```cpp\n#include <queue>\n#include <vector>\nusing namespace std;\n\n// MAX-heap (default): top() is the LARGEST element\npriority_queue<int> maxHeap;\n\n// MIN-heap: top() is the SMALLEST element. Memorize this incantation.\npriority_queue<int, vector<int>, greater<int>> minHeap;\n\n// Heap of pairs — orders by .first, then .second (lexicographic).\n// Min-heap of (cost, node) is the workhorse for Dijkstra / K-way merge.\npriority_queue<pair<int,int>, vector<pair<int,int>>, greater<pair<int,int>>> pq;\n\n// Custom comparator via lambda (e.g. order points by distance to origin).\n// NOTE: the comparator returns true when a should come BELOW b (weaker priority),\n// which is the REVERSE of the intuition — same rule as sort's comparator inverted.\nauto cmp = [](const vector<int>& a, const vector<int>& b) {\n    return a[0]*a[0]+a[1]*a[1] > b[0]*b[0]+b[1]*b[1]; // '>' => min-heap by distance\n};\npriority_queue<vector<int>, vector<vector<int>>, decltype(cmp)> distHeap(cmp);\n```\n\n> [!PITFALL] The default is a MAX-heap\n> This is *the* most common C++ heap bug, and it fails silently — your code compiles, runs, and returns wrong answers. If you want the smallest on top, you must write the full three-argument form with `greater<int>`. Say it out loud when you declare it: \"min-heap, so `greater`.\"\n\n> [!WARNING] Comparator direction is inverted vs `sort`\n> For a heap, the comparator returning `true` means \"`a` has *lower* priority than `b`\" — `a` sinks toward the bottom. So `>` in the comparator produces a **min**-heap. When in doubt, don't argue with yourself: push 3 elements, print `top()`, and check.\n\n> [!NOTE]\n> The pair form `priority_queue<pair<int,int>, ..., greater<...>>` compares by `.first` then `.second`. Put the sort key first — `(cost, node)`, `(value, listIndex)` — and everything just works. This exact declaration returns in Week 6 as the engine of Dijkstra."
+    },
+    {
+      "heading": "Template 1 — Top-K largest with a size-K MIN-heap",
+      "body": "Here's the counter-intuitive move that unlocks the whole top-K family: to find the K **largest** elements, keep a **min-heap capped at size K**.\n\n> [!INTUITION] Guard the door with your weakest champion\n> Imagine a club that only admits the K largest numbers seen so far. The bouncer doesn't need to know the whole ranking — only the *weakest current member*, because that's who a newcomer must beat to get in. A min-heap of the champions puts exactly that weakest member at `top()`, so every admission decision is one comparison plus one $O(\\log K)$ swap.\n\n[[fig:m08-topk-evict]]\n\nStream every element through; if the heap grows past K, pop — the pop always removes the smallest, i.e. the one that just lost its seat:\n\n```cpp\n// Returns the K largest elements (unordered).\nvector<int> topKLargest(vector<int>& nums, int k) {\n    priority_queue<int, vector<int>, greater<int>> minHeap; // min-heap, cap = k\n    for (int x : nums) {\n        minHeap.push(x);\n        if ((int)minHeap.size() > k) minHeap.pop(); // drop the current smallest\n    }\n    vector<int> res;\n    while (!minHeap.empty()) { res.push_back(minHeap.top()); minHeap.pop(); }\n    return res; // the k survivors are the k largest\n}\n```\n\nThis runs in $O(n \\log k)$ with $O(k)$ extra space — a real win over the $O(n \\log n)$ full sort when $k \\ll n$. The mirror image works too: K **smallest** → size-K **max**-heap.\n\n> [!EXAM]\n> When a Codility/Flipkart problem says \"top K\" and $n$ is huge, they are testing whether you know $O(n \\log k)$. In an interview, narrate all three tiers: full sort $O(n \\log n)$, heap $O(n \\log k)$, quickselect $O(n)$ average — then implement the heap version because it's short and safe under time pressure."
+    },
+    {
+      "heading": "Template 2 — K-way merge: a heap of next pointers",
+      "body": "You have $k$ sorted lists and want one merged output (or just the K-th smallest overall). Concatenating and sorting is $O(N \\log N)$ over all $N$ elements and throws away the sortedness you were given.\n\nThe observation that saves you: at any moment, the global next-smallest element **must be one of the $k$ current heads** — the first unconsumed element of each list. Everything deeper is blocked behind its own head. So you never need $N$ candidates in play, only $k$:\n\n[[fig:m08-kway]]\n\nSeed the heap with one entry per list. Each entry carries enough info to find its successor. Pop the global min, emit it, push its successor from the *same* list:\n\n```cpp\n// Merge k sorted vectors. Heap holds (value, whichList, indexInThatList).\nvector<int> mergeK(vector<vector<int>>& lists) {\n    priority_queue<array<int,3>, vector<array<int,3>>, greater<array<int,3>>> pq;\n    for (int i = 0; i < (int)lists.size(); ++i)\n        if (!lists[i].empty()) pq.push({lists[i][0], i, 0});\n    vector<int> res;\n    while (!pq.empty()) {\n        auto [val, li, idx] = pq.top(); pq.pop();\n        res.push_back(val);\n        if (idx + 1 < (int)lists[li].size())\n            pq.push({lists[li][idx+1], li, idx+1}); // push successor from same list\n    }\n    return res;\n}\n```\n\n> [!KEY]\n> The heap never exceeds size $k$: you seed $k$ entries and every pop is followed by *at most one* push. Invariant: **at most one live head per list**. That caps every operation at $O(\\log k)$, so the whole merge is $O(N \\log k)$ time, $O(k)$ space — and it *streams*, so you can stop early after emitting the first M elements.\n\nThis one skeleton, re-skinned, solves **Merge k Sorted Lists**, **Kth Smallest in a Sorted Matrix** (seed the first column, push the right/down neighbor), and **Find K Pairs with Smallest Sums** (seed `(nums1[i], nums2[0])` pairs, lazily push neighbors)."
+    },
+    {
+      "heading": "Template 3 — Two heaps, one median",
+      "body": "The running-median problem: numbers arrive one at a time, and after each you must report the median. The trick is realizing you never need the full sorted order — **only the boundary between the smaller half and the larger half**. So maintain exactly that boundary with two heaps facing each other:\n\n- `lo` — a **max-heap** holding the smaller half; its top is the largest small number.\n- `hi` — a **min-heap** holding the larger half; its top is the smallest large number.\n\n[[fig:m08-two-heaps]]\n\nTwo invariants make the median fall out for free: **ordering** ($\\max(lo) \\le \\min(hi)$) and **balance** ($|lo| - |hi| \\in \\{0, 1\\}$). Then the median is `lo.top()` for an odd count, or the average of the two tops for even.\n\n```cpp\npriority_queue<int> lo;                                     // max-heap: smaller half\npriority_queue<int, vector<int>, greater<int>> hi;         // min-heap: larger half\n\nvoid addNum(int num) {\n    lo.push(num);                 // 1) tentatively add to lower half\n    hi.push(lo.top()); lo.pop();  // 2) move its max up to keep lo <= hi ordered\n    if (hi.size() > lo.size()) {  // 3) rebalance so lo has >= as many as hi\n        lo.push(hi.top()); hi.pop();\n    }\n}\ndouble findMedian() {\n    return lo.size() > hi.size() ? lo.top() : (lo.top() + hi.top()) / 2.0;\n}\n```\n\nStep 2 is the elegant part: instead of *deciding* which half `num` belongs to (with fiddly empty-heap edge cases), you launder it through — push into `lo`, then shove `lo`'s maximum across to `hi`. Whatever crosses over is exactly the element that belongs on the boundary, so the ordering invariant repairs itself. Step 3 only fixes sizes, never ordering.\n\n> [!EXAMPLE]\n> Insert **5**: `lo={5}` → launder → `hi={5}`, `lo={}` → rebalance → `lo={5}`, `hi={}`. Median **5**.\n> Insert **2**: `lo={5,2}`, top 5 crosses → `lo={2}`, `hi={5}`. Sizes equal. Median $(2+5)/2 = \\textbf{3.5}$.\n> Insert **8**: `lo={8,2}`, top 8 crosses → `hi={5,8}`; now `hi` is bigger, so 5 comes back → `lo={5,2}`, `hi={8}`. Median `lo.top()` = **5**. ✓ (sorted: 2, 5, 8)\n\n> [!PITFALL]\n> The classic median bug is skipping the launder (step 2) and writing `if (num < lo.top()) lo.push(num); else hi.push(num);` — which is undefined behavior on the very first insert (`lo` is empty) and easy to get wrong on ties. The three-line launder-then-rebalance has *zero* case analysis. Use it verbatim."
+    },
+    {
+      "heading": "Pitfalls, complexity narration, and when NOT to heap",
+      "body": "The recurring bugs and the judgment calls, collected:\n\n- **Default is a MAX-heap** — repeat it until it's boring. Min-heap = `priority_queue<int, vector<int>, greater<int>>`.\n- **Top-K uses the *opposite* heap.** K largest → size-K **min**-heap. K smallest → size-K **max**-heap. Getting this backwards silently returns wrong answers on large inputs. Verbalize: \"min-heap of size k, so the weakest survivor is on top and cheap to kick out.\"\n- **Guard `top()` / `pop()` on empty.** On an empty `priority_queue` they are **undefined behavior**, not an exception — no crash message, just garbage. Always `while (!pq.empty())` or check size first.\n- **Two-heaps rebalancing is an invariant, not an afterthought.** After *every* insert, re-establish both $\\max(lo) \\le \\min(hi)$ and the size rule.\n- **Ties and stability.** Heaps are not stable. If ties must break by a secondary key, encode it in the comparator (a pair of `(primary, secondary)`) — never hope.\n\n> [!PITFALL] When NOT to use a heap\n> If you need the full sorted order anyway — just sort. If $k$ is close to $n$ — sorting is simpler at the same asymptotics. If values live in a small fixed range — counting/bucket sort beats the heap outright (Top K Frequent has an $O(n)$ bucket solution; a median over values in $[0,100]$ needs only 101 counters). Mentioning the non-heap alternative is what separates a good answer from a great one.\n\n> [!EXAM]\n> **Name the pattern before coding.** When you spot \"K-th\", \"top K\", \"median of a stream\", or \"next-smallest across sorted sources\", say it: \"this is a two-heaps problem\" / \"this is a K-way merge.\" Then lead the complexity narration: \"the heap gives me $O(\\log k)$ per operation, so $O(n \\log k)$ total — versus $O(n \\log n)$ for a full sort and $O(n)$ average for quickselect.\" Interviewers score the framing as much as the code."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Kth Largest Element in a Stream",
+      "url": "https://leetcode.com/problems/kth-largest-element-in-a-stream/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Size-K min-heap kept alive as a running structure — builds the 'min-heap for largest' reflex."
+    },
+    {
+      "name": "Last Stone Weight",
+      "url": "https://leetcode.com/problems/last-stone-weight/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Max-heap simulation: pop the two heaviest, push back the difference if nonzero."
+    },
+    {
+      "name": "Kth Largest Element in an Array",
+      "url": "https://leetcode.com/problems/kth-largest-element-in-an-array/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The canonical top-K: heap in $O(n \\log k)$ — then be ready to contrast with quickselect."
+    },
+    {
+      "name": "Top K Frequent Elements",
+      "url": "https://leetcode.com/problems/top-k-frequent-elements/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Hash-map count, then heap by frequency; know the $O(n)$ bucket-sort alternative as the follow-up."
+    },
+    {
+      "name": "K Closest Points to Origin",
+      "url": "https://leetcode.com/problems/k-closest-points-to-origin/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Top-K with a custom distance comparator — K *smallest* distances means a size-K **max**-heap."
+    },
+    {
+      "name": "Sort Characters By Frequency",
+      "url": "https://leetcode.com/problems/sort-characters-by-frequency/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Count, heap-order by frequency, rebuild the string from most frequent down."
+    },
+    {
+      "name": "Task Scheduler",
+      "url": "https://leetcode.com/problems/task-scheduler/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Greedy-with-heap scheduling: always run the most-frequent still-available task — see the deep dive for the last-window gotcha."
+    },
+    {
+      "name": "Reorganize String",
+      "url": "https://leetcode.com/problems/reorganize-string/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Greedy heap: repeatedly place the most-frequent char that isn't the one you just placed."
+    },
+    {
+      "name": "Meeting Rooms II",
+      "url": "https://leetcode.com/problems/meeting-rooms-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Sort by start, min-heap of end times — the heap's peak size *is* the number of rooms."
+    },
+    {
+      "name": "Kth Smallest Element in a Sorted Matrix",
+      "url": "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "K-way merge over rows: heap of (value, r, c), push the successor from the same row."
+    },
+    {
+      "name": "Merge k Sorted Lists",
+      "url": "https://leetcode.com/problems/merge-k-sorted-lists/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "The canonical K-way merge — heap of live list heads, never more than one node per list."
+    },
+    {
+      "name": "Find Median from Data Stream",
+      "url": "https://leetcode.com/problems/find-median-from-data-stream/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "The full two-heaps pattern — nail the launder-then-rebalance insert from Template 3."
+    },
+    {
+      "name": "Find K Pairs with Smallest Sums",
+      "url": "https://leetcode.com/problems/find-k-pairs-with-smallest-sums/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "K-way merge dressed as pair-sums: seed the first column of pairs, push neighbors lazily."
+    },
+    {
+      "name": "IPO",
+      "url": "https://leetcode.com/problems/ipo/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Two-heap greedy: a capital-sorted unlock stream feeds a max-heap of profits — grab the richest reachable project k times."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Find Median from Data Stream** — numbers arrive one at a time; after each arrival you must be able to report the current median essentially instantly. Design the structure.",
+      "url": "https://leetcode.com/problems/find-median-from-data-stream/",
+      "tag": "two-heaps",
+      "answer": "**Why the naive approaches fail.** A sorted array gives $O(1)$ median but every insert is $O(n)$ — you shift elements to make room. A balanced BST works but is a lot of code and easy to get wrong under time pressure. Neither exploits the key fact: **you never need the full order — only the middle.**\n\n> [!INTUITION]\n> The median only cares about the *boundary* between the smaller half and the larger half of the data. So maintain exactly that boundary and nothing more: a max-heap `lo` whose top is the largest of the small numbers (the left side of the median), and a min-heap `hi` whose top is the smallest of the large numbers (the right side).\n\n[[fig:m08-two-heaps]]\n\nKeep them balanced — `lo` has the same count as `hi`, or exactly one more — and the median is `lo.top()` when the total is odd, or the average of the two tops when even.\n\n**The trick that makes insertion correct.** The subtle bug is deciding which half a new number belongs to without hand-writing boundary comparisons (which explode into empty-heap edge cases). Instead, launder it through both heaps:\n\n```cpp\nlo.push(num);                 // 1) blindly add to the smaller half\nhi.push(lo.top()); lo.pop();  // 2) shove lo's current max into hi\n                              //    -> guarantees every lo element <= every hi element\nif (hi.size() > lo.size()) {  // 3) if hi got too big, hand its min back to lo\n    lo.push(hi.top()); hi.pop();\n}\n```\n\nStep 2 is the elegant part: you let `num` enter `lo` unconditionally, then push `lo`'s maximum across. That maximum is *exactly* the element that should sit on the boundary — whether it's `num` itself or an older element `num` displaced — so the ordering invariant $\\max(lo) \\le \\min(hi)$ repairs itself automatically. Step 3 only fixes sizes, never ordering.\n\n```cpp\npriority_queue<int> lo;                                     // max-heap: smaller half\npriority_queue<int, vector<int>, greater<int>> hi;         // min-heap: larger half\n\nvoid addNum(int num) {\n    lo.push(num);\n    hi.push(lo.top()); lo.pop();\n    if (hi.size() > lo.size()) { lo.push(hi.top()); hi.pop(); }\n}\ndouble findMedian() {\n    return lo.size() > hi.size() ? lo.top() : (lo.top() + hi.top()) / 2.0;\n}\n```\n\n**Complexity:** each `addNum` is $O(\\log n)$; `findMedian` is $O(1)$; space $O(n)$. This is the intended solution and interviewers expect it *by name* — \"two heaps.\"\n\n**Follow-up they love:** if all numbers are known to lie in $[0, 100]$, replace the heaps with a 101-bucket count array and answer in $O(100)$ per query. Mention it — it shows range awareness, and the same downgrade applies to any small-domain order statistic."
+    },
+    {
+      "q": "**Task Scheduler** — given tasks (letters) and a cooldown `n`, two copies of the same task must be at least `n` slots apart. Minimize the total time, counting forced idle slots.",
+      "url": "https://leetcode.com/problems/task-scheduler/",
+      "tag": "greedy-heap",
+      "answer": "**Why greedy-by-most-frequent is right.** The task with the highest remaining count is the bottleneck — it's the one that forces idle gaps. So in every scheduling window you want the most-frequent *still-remaining* tasks placed first, spaced out by the cooldown. A **max-heap keyed on remaining count** hands you the current most-frequent task in $O(\\log 26)$.\n\n**The algorithm, step by step.** Process time in rounds of length `n+1` — exactly one cooldown window, the shortest span in which a task can legally repeat. In each round: pop up to `n+1` *distinct* tasks from the heap (they're all different, so no cooldown conflicts inside the window), decrement each, stash the survivors, and push them back after the round.\n\n[[fig:m08-task-windows]]\n\n```cpp\nint leastInterval(vector<char>& tasks, int n) {\n    int cnt[26] = {0};\n    for (char c : tasks) cnt[c - 'A']++;\n    priority_queue<int> pq;                 // max-heap of remaining counts\n    for (int c : cnt) if (c) pq.push(c);\n\n    int time = 0;\n    while (!pq.empty()) {\n        vector<int> temp;                   // tasks scheduled this window\n        for (int i = 0; i < n + 1; ++i) {   // one cooldown window = n+1 slots\n            if (!pq.empty()) { temp.push_back(pq.top() - 1); pq.pop(); }\n        }\n        for (int r : temp) if (r > 0) pq.push(r); // re-arm tasks that remain\n        // if heap emptied out, the last partial window has no trailing idle\n        time += pq.empty() ? (int)temp.size() : n + 1;\n    }\n    return time;\n}\n```\n\n> [!PITFALL] The one gotcha is the final window\n> In every *full* window you charge `n + 1` slots even if you placed fewer than `n+1` real tasks — the remainder are forced idles. But in the **last** window (heap empty afterwards) there is nothing left to wait for, so you charge only `temp.size()`, the real tasks you actually placed. Getting that boundary right is the whole problem.\n\n**Complexity:** $O(T)$ total heap operations over all tasks, each $O(\\log 26) = O(1)$ effectively — so linear. There's also a slick $O(1)$ closed-form counting formula, but the heap version is what *generalizes* (it adapts when tasks gain priorities, arrival times, or per-task cooldowns) and it's what you should lead with."
+    },
+    {
+      "q": "**Merge k Sorted Lists** — you're given k linked lists, each already sorted ascending. Merge them into one sorted list.",
+      "url": "https://leetcode.com/problems/merge-k-sorted-lists/",
+      "tag": "k-way-merge",
+      "answer": "**Why not just concatenate and sort?** That's $O(N \\log N)$ over all $N$ nodes and throws away the fact that each list is *already sorted*. The heap version is $O(N \\log k)$ — a real win when $k$ is small relative to $N$ — and it streams: you can stop early after emitting the first M elements.\n\n> [!KEY]\n> At any moment the global next-smallest node is the minimum among the **current heads** of the k lists — only k candidates, never N. A size-k min-heap tracks exactly those heads. Pop the min, splice it onto the result, and push that node's `next` to refill its list's slot.\n\n[[fig:m08-kway]]\n\n```cpp\nstruct Cmp { bool operator()(ListNode* a, ListNode* b){ return a->val > b->val; } };\n\nListNode* mergeKLists(vector<ListNode*>& lists) {\n    priority_queue<ListNode*, vector<ListNode*>, Cmp> pq;\n    for (auto l : lists) if (l) pq.push(l);   // seed with every non-empty head\n    ListNode dummy, *tail = &dummy;\n    while (!pq.empty()) {\n        ListNode* node = pq.top(); pq.pop();\n        tail->next = node; tail = node;       // splice smallest onto the result\n        if (node->next) pq.push(node->next);  // refill from the SAME list\n    }\n    return dummy.next;\n}\n```\n\nTwo details worth narrating:\n\n- The comparator uses `>` — remember, for a `priority_queue` that inversion is what produces a **min**-heap by `val`.\n- **Why the heap never exceeds size k:** you seed k nodes, and every pop is followed by *at most one* push. The invariant \"at most one live head per list\" caps it, which is what makes each operation $O(\\log k)$.\n\n**Complexity:** $O(N \\log k)$ time, $O(k)$ space (the dummy-head splice reuses existing nodes — no allocation).\n\n**What generalizes:** the identical skeleton solves **Kth Smallest Element in a Sorted Matrix** (seed the first column; on pop, push the neighbor(s)) and **Find K Pairs with Smallest Sums** (seed `(nums1[i] + nums2[0])` pairs; lazily push the `j+1` neighbor). Any time sorted sources feed one consumer, think K-way merge."
+    },
+    {
+      "q": "**IPO** — you may complete at most `k` projects; each needs a minimum capital to start and pays a profit that adds to your capital. Starting from capital `W`, maximize your final capital.",
+      "url": "https://leetcode.com/problems/ipo/",
+      "tag": "two-heap-greedy",
+      "answer": "**Why sorting alone fails.** You want the most profitable project — but *affordability changes as your capital grows*. A project too expensive now becomes reachable after a few wins. You need two different orderings live at the same time: by capital (to know what unlocks) and by profit (to know what to grab). One sort can't serve both.\n\n> [!INTUITION] Unlock, then grab\n> Run a pipeline: a **min-heap by capital** holds the locked projects with the cheapest-to-unlock on top, and it feeds a **max-heap by profit** holding everything currently affordable. Each round: drain every project whose capital requirement ≤ current capital across to the profit side, then pop the single richest available project and bank it.\n\n(In the code below the \"capital min-heap\" is flattened into a capital-sorted array walked by an index `i` — same effect, less code.)\n\n```cpp\nint findMaximizedCapital(int k, int W, vector<int>& profits, vector<int>& capital) {\n    int n = profits.size();\n    vector<pair<int,int>> proj(n);           // (capital, profit)\n    for (int i = 0; i < n; ++i) proj[i] = {capital[i], profits[i]};\n    sort(proj.begin(), proj.end());          // ascending by capital => easy unlocking\n    priority_queue<int> avail;               // max-heap of unlocked profits\n    int i = 0;\n    while (k--) {\n        while (i < n && proj[i].first <= W) avail.push(proj[i++].second);\n        if (avail.empty()) break;            // nothing affordable => stop\n        W += avail.top(); avail.pop();       // take the richest reachable project\n    }\n    return W;\n}\n```\n\n**Why the greedy is safe.** Completing a project never *reduces* capital, so once something is affordable it stays affordable forever — unlocking is monotone, which is why the index `i` never needs to move backwards. Given that, taking the max-profit unlocked project each round is a standard exchange argument: swapping it for any lesser choice can only lower (or match) your capital at every future step.\n\n**Complexity:** $O(n \\log n)$ for the sort plus $O((n + k) \\log n)$ heap traffic — call it $O(n \\log n)$. \n\n**What generalizes:** this \"monotone unlock stream feeds a max-heap, greedily extract\" shape recurs across scheduling and resource problems — courses with deadlines, fuel stops, machine assignment. When a greedy needs *two orderings at once*, reach for two heaps."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An endless stream of sensor readings arrives, and after **every** reading you must report the current median. Which approach gives $O(\\log n)$ per insert and $O(1)$ per query?",
+      "options": [
+        "Keep a sorted `vector` and insert each reading with binary search",
+        "Keep one min-heap of everything and peek at `top()`",
+        "A max-heap for the lower half + a min-heap for the upper half, kept balanced",
+        "It can't be done with heaps — you need a balanced BST"
+      ],
+      "answer": 2,
+      "explanation": "Two heaps maintain exactly the boundary the median lives on: $O(\\log n)$ insert, $O(1)$ median from the tops. The sorted vector finds the *position* in $O(\\log n)$ but shifting elements to insert costs $O(n)$. A single min-heap only exposes the global minimum — the median is buried in the middle, which heaps can't reach. A BST works but is strictly more code for no gain here.",
+      "tag": "pattern"
+    },
+    {
+      "q": "In C++ you write `priority_queue<int> pq; pq.push(3); pq.push(7); pq.push(5);` — what does `pq.top()` return?",
+      "options": [
+        "7",
+        "3",
+        "5",
+        "Undefined — you must supply a comparator"
+      ],
+      "answer": 0,
+      "explanation": "`priority_queue` is a **max-heap by default** (it uses `less<int>`), so `top()` is the largest element: 7. If you wanted 3 (the minimum) you'd need the full incantation `priority_queue<int, vector<int>, greater<int>>`. Forgetting this compiles fine and silently gives wrong answers — it's the single most common C++ heap bug.",
+      "tag": "cpp-default"
+    },
+    {
+      "q": "You need the **20 smallest** values out of $10^6$ elements in $O(n \\log k)$ time and $O(k)$ space. Which structure?",
+      "options": [
+        "A size-20 min-heap; pop whenever it exceeds 20",
+        "A size-20 max-heap; pop whenever it exceeds 20",
+        "A min-heap of all $10^6$ elements; pop 20 times",
+        "A max-heap of all $10^6$ elements; pop 20 times"
+      ],
+      "answer": 1,
+      "explanation": "Top-K uses the **opposite** heap: K smallest → size-K **max**-heap, so the *largest of your current keepers* sits at `top()` and is cheap to evict when something smaller arrives. Option A keeps evicting the smallest — you'd end up with the 20 *largest*. Option C gives the right answer but costs $O(n)$ space and $O(n \\log n)$-ish build time, violating the stated bounds.",
+      "tag": "top-k"
+    },
+    {
+      "q": "You merge $k$ sorted lists containing $N$ nodes total using a min-heap of current heads. What is the time complexity?",
+      "options": [
+        "$O(N \\log N)$",
+        "$O(N \\cdot k)$",
+        "$O(k \\log N)$",
+        "$O(N \\log k)$"
+      ],
+      "answer": 3,
+      "explanation": "Every one of the $N$ nodes is pushed and popped exactly once, and the heap never holds more than one live head per list — size ≤ $k$ — so each operation is $O(\\log k)$: total $O(N \\log k)$. $O(N \\log N)$ is what concatenate-and-sort costs, i.e. what you're beating. $O(N \\cdot k)$ is the no-heap approach of scanning all k heads per output element.",
+      "tag": "complexity"
+    },
+    {
+      "q": "In the two-heaps median, a student replaces the launder step with: `if (num < lo.top()) lo.push(num); else hi.push(num);` followed by size rebalancing. What's the most immediate problem?",
+      "options": [
+        "Undefined behavior on the very first insert — `lo.top()` is called on an empty heap",
+        "Nothing — it's exactly equivalent to the launder version",
+        "The median becomes an average even for odd counts",
+        "Each insert degrades to $O(n)$"
+      ],
+      "answer": 0,
+      "explanation": "`top()` on an empty `priority_queue` is undefined behavior — no exception, just garbage or a crash — and `lo` is empty on the first call. Even after patching that with a special case, this style needs careful tie/boundary analysis. The launder trick (`lo.push(num); hi.push(lo.top()); lo.pop();` then rebalance) has zero case analysis, which is exactly why the template uses it. Complexity is unaffected either way, so D is wrong.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "You declare `auto cmp = [](int a, int b){ return a < b; };` and build `priority_queue<int, vector<int>, decltype(cmp)> pq(cmp);`. What have you built?",
+      "options": [
+        "A min-heap — `<` means smaller wins",
+        "A compile error — lambdas can't be heap comparators",
+        "A max-heap — identical to the default",
+        "A queue that preserves insertion order"
+      ],
+      "answer": 2,
+      "explanation": "The heap comparator returning `true` means \"`a` has *lower* priority than `b`\" — `a` sinks. With `a < b`, smaller elements sink, so the **largest** floats to `top()`: a max-heap, exactly what the default `less<int>` gives. This inversion trips everyone; for a min-heap you want `>` (or `greater<int>`). Lambdas are fine as comparators as long as you pass the instance to the constructor.",
+      "tag": "comparator"
+    },
+    {
+      "q": "Trace `topKLargest(nums, k)` from Template 1 with `nums = [4, 1, 7, 3, 9]`, `k = 2`. What does the min-heap contain at the end, and what's on top?",
+      "options": [
+        "{4, 7} with 4 on top",
+        "{7, 9} with 7 on top",
+        "{7, 9} with 9 on top",
+        "{9, 4} with 9 on top"
+      ],
+      "answer": 1,
+      "explanation": "Push 4 → {4}. Push 1 → {1,4}. Push 7 → size 3 > 2, pop the min (1) → {4,7}. Push 3 → pop 3 → {4,7}. Push 9 → pop 4 → {7,9}. The survivors are the 2 largest, and since it's a *min*-heap, the smaller survivor (7 — the \"weakest champion\") sits on top, ready to be challenged. If 9 were on top you'd have a max-heap, which would evict your best elements instead.",
+      "tag": "trace"
+    }
+  ],
+  "figures": {
+    "m08-array-tree": {
+      "caption": "**One array, two views.** The heap is stored flat (bottom), but you reason about it as a tree (top): node `i` has children at `2i+1`, `2i+2`. This min-heap only promises *parent ≤ children* — much weaker than sorted order, which is why pushes and pops stay $O(\\log n)$.",
+      "svg": "<svg viewBox='0 0 660 360' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heap array to tree correspondence'><text x='20' y='24' class='t-bold'>one array, seen as a tree (min-heap)</text><line x1='330' y1='70' x2='190' y2='146' class='s-line'/><line x1='330' y1='70' x2='470' y2='146' class='s-line'/><line x1='190' y1='146' x2='120' y2='222' class='s-line'/><line x1='190' y1='146' x2='260' y2='222' class='s-line'/><line x1='470' y1='146' x2='400' y2='222' class='s-line'/><line x1='470' y1='146' x2='540' y2='222' class='s-line'/><circle cx='330' cy='70' r='17' class='f-accent-soft s-accent'/><text x='330' y='75' text-anchor='middle' class='t-mono t-accent'>2</text><text x='356' y='62' class='t-sm t-muted'>0</text><circle cx='190' cy='146' r='17' class='f-panel s-line'/><text x='190' y='151' text-anchor='middle' class='t-mono'>5</text><text x='216' y='138' class='t-sm t-muted'>1</text><circle cx='470' cy='146' r='17' class='f-panel s-line'/><text x='470' y='151' text-anchor='middle' class='t-mono'>3</text><text x='496' y='138' class='t-sm t-muted'>2</text><circle cx='120' cy='222' r='17' class='f-panel s-line'/><text x='120' y='227' text-anchor='middle' class='t-mono'>9</text><text x='146' y='214' class='t-sm t-muted'>3</text><circle cx='260' cy='222' r='17' class='f-panel s-line'/><text x='260' y='227' text-anchor='middle' class='t-mono'>7</text><text x='286' y='214' class='t-sm t-muted'>4</text><circle cx='400' cy='222' r='17' class='f-panel s-line'/><text x='400' y='227' text-anchor='middle' class='t-mono'>8</text><text x='426' y='214' class='t-sm t-muted'>5</text><circle cx='540' cy='222' r='17' class='f-panel s-line'/><text x='540' y='227' text-anchor='middle' class='t-mono'>4</text><text x='566' y='214' class='t-sm t-muted'>6</text><rect x='170' y='268' width='44' height='44' class='f-accent-soft s-accent'/><text x='192' y='296' text-anchor='middle' class='t-mono t-accent'>2</text><rect x='216' y='268' width='44' height='44' class='f-panel s-line'/><text x='238' y='296' text-anchor='middle' class='t-mono'>5</text><rect x='262' y='268' width='44' height='44' class='f-panel s-line'/><text x='284' y='296' text-anchor='middle' class='t-mono'>3</text><rect x='308' y='268' width='44' height='44' class='f-panel s-line'/><text x='330' y='296' text-anchor='middle' class='t-mono'>9</text><rect x='354' y='268' width='44' height='44' class='f-panel s-line'/><text x='376' y='296' text-anchor='middle' class='t-mono'>7</text><rect x='400' y='268' width='44' height='44' class='f-panel s-line'/><text x='422' y='296' text-anchor='middle' class='t-mono'>8</text><rect x='446' y='268' width='44' height='44' class='f-panel s-line'/><text x='468' y='296' text-anchor='middle' class='t-mono'>4</text><text x='192' y='330' text-anchor='middle' class='t-sm t-muted'>0</text><text x='238' y='330' text-anchor='middle' class='t-sm t-muted'>1</text><text x='284' y='330' text-anchor='middle' class='t-sm t-muted'>2</text><text x='330' y='330' text-anchor='middle' class='t-sm t-muted'>3</text><text x='376' y='330' text-anchor='middle' class='t-sm t-muted'>4</text><text x='422' y='330' text-anchor='middle' class='t-sm t-muted'>5</text><text x='468' y='330' text-anchor='middle' class='t-sm t-muted'>6</text><text x='330' y='354' text-anchor='middle' class='t-sm t-muted'>parent(i) = (i-1)/2 · children(i) = 2i+1, 2i+2</text></svg>"
+    },
+    "m08-topk-evict": {
+      "caption": "**The size-K min-heap bouncer** (K = 3, tracking the 3 largest). New element 8 challenges `top()` = 5, the weakest current champion. 8 wins, 5 is evicted, and the heap becomes {7, 8, 9} — still exactly the K largest seen so far.",
+      "svg": "<svg viewBox='0 0 660 250' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Size-K min-heap evicting its weakest element'><text x='20' y='24' class='t-bold'>K largest &#8658; size-K MIN-heap</text><rect x='30' y='88' width='44' height='44' class='f-panel2 s-line'/><text x='52' y='116' text-anchor='middle' class='t-mono'>8</text><text x='52' y='158' text-anchor='middle' class='t-sm t-muted'>incoming</text><line x1='84' y1='110' x2='246' y2='110' class='s-accent' stroke-width='2' marker-end='url(#dg-arrow-accent)'/><text x='165' y='96' text-anchor='middle' class='t-sm t-accent'>8 &gt; top()? yes</text><text x='290' y='74' text-anchor='middle' class='t-sm t-muted'>top = weakest champion</text><line x1='290' y1='110' x2='240' y2='190' class='s-line'/><line x1='290' y1='110' x2='340' y2='190' class='s-line'/><circle cx='290' cy='110' r='17' class='f-bad-soft s-bad'/><text x='290' y='115' text-anchor='middle' class='t-mono t-bad'>5</text><circle cx='240' cy='190' r='17' class='f-panel s-line'/><text x='240' y='195' text-anchor='middle' class='t-mono'>9</text><circle cx='340' cy='190' r='17' class='f-panel s-line'/><text x='340' y='195' text-anchor='middle' class='t-mono'>7</text><line x1='314' y1='110' x2='430' y2='110' class='s-bad' stroke-width='2' marker-end='url(#dg-arrow-bad)'/><text x='372' y='96' text-anchor='middle' class='t-sm t-bad'>evict 5</text><text x='450' y='104' class='t-sm t-bad'>popped: 5</text><text x='450' y='134' class='t-mono'>heap: {7, 8, 9}</text><text x='20' y='232' class='t-sm t-muted'>n elements, heap capped at K &#8658; O(n log K) — beats full sort O(n log n)</text></svg>"
+    },
+    "m08-kway": {
+      "caption": "**K-way merge, one step.** The heap holds only the current head of each sorted list — here {1, 4, 6}. Pop the minimum (1) onto the output, then push its successor (7) from the *same* list. The heap never grows past k.",
+      "svg": "<svg viewBox='0 0 660 272' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='K-way merge with a min-heap of list heads'><text x='20' y='24' class='t-bold'>K-way merge: only K candidates matter</text><text x='20' y='80' class='t-sm t-muted'>L0</text><rect x='60' y='52' width='44' height='44' class='f-accent-soft s-accent'/><text x='82' y='80' text-anchor='middle' class='t-mono t-accent'>1</text><rect x='106' y='52' width='44' height='44' class='f-panel s-line'/><text x='128' y='80' text-anchor='middle' class='t-mono'>7</text><rect x='152' y='52' width='44' height='44' class='f-panel s-line'/><text x='174' y='80' text-anchor='middle' class='t-mono'>9</text><text x='20' y='146' class='t-sm t-muted'>L1</text><rect x='60' y='118' width='44' height='44' class='f-accent-soft s-accent'/><text x='82' y='146' text-anchor='middle' class='t-mono t-accent'>4</text><rect x='106' y='118' width='44' height='44' class='f-panel s-line'/><text x='128' y='146' text-anchor='middle' class='t-mono'>5</text><rect x='152' y='118' width='44' height='44' class='f-panel s-line'/><text x='174' y='146' text-anchor='middle' class='t-mono'>8</text><text x='20' y='212' class='t-sm t-muted'>L2</text><rect x='60' y='184' width='44' height='44' class='f-accent-soft s-accent'/><text x='82' y='212' text-anchor='middle' class='t-mono t-accent'>6</text><rect x='106' y='184' width='44' height='44' class='f-panel s-line'/><text x='128' y='212' text-anchor='middle' class='t-mono'>10</text><rect x='152' y='184' width='44' height='44' class='f-panel s-line'/><text x='174' y='212' text-anchor='middle' class='t-mono'>11</text><line x1='204' y1='74' x2='274' y2='104' class='s-accent' stroke-width='2' marker-end='url(#dg-arrow-accent)'/><line x1='204' y1='140' x2='274' y2='140' class='s-accent' stroke-width='2' marker-end='url(#dg-arrow-accent)'/><line x1='204' y1='206' x2='274' y2='176' class='s-accent' stroke-width='2' marker-end='url(#dg-arrow-accent)'/><text x='345' y='66' text-anchor='middle' class='t-sm t-muted'>min-heap (heads)</text><rect x='285' y='76' width='120' height='124' rx='8' class='f-panel2 s-line'/><text x='345' y='110' text-anchor='middle' class='t-mono t-accent'>1</text><text x='345' y='142' text-anchor='middle' class='t-mono'>4</text><text x='345' y='174' text-anchor='middle' class='t-mono'>6</text><line x1='409' y1='138' x2='470' y2='138' class='s-ok' stroke-width='2' marker-end='url(#dg-arrow-ok)'/><text x='438' y='124' text-anchor='middle' class='t-sm t-ok'>pop</text><rect x='480' y='116' width='44' height='44' class='f-ok-soft s-ok'/><text x='502' y='144' text-anchor='middle' class='t-mono t-ok'>1</text><rect x='526' y='116' width='44' height='44' class='f-panel s-line'/><rect x='572' y='116' width='44' height='44' class='f-panel s-line'/><text x='548' y='192' text-anchor='middle' class='t-sm t-muted'>merged output</text><text x='20' y='254' class='t-sm t-muted'>after popping 1 from L0, push its successor 7 — heap size stays &#8804; k = 3</text></svg>"
+    },
+    "m08-two-heaps": {
+      "caption": "**Two heaps facing each other.** `lo` (max-heap) holds the smaller half {2, 3, 5}; `hi` (min-heap) holds the larger half {7, 9}. With 5 total elements, `lo` keeps the extra one, so the median is simply `lo.top()` = 5 — read straight off the boundary.",
+      "svg": "<svg viewBox='0 0 660 240' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Two heaps meeting at the median'><text x='20' y='24' class='t-bold'>two heaps meet at the median</text><rect x='30' y='56' width='220' height='124' rx='8' class='f-panel2 s-line'/><text x='140' y='80' text-anchor='middle' class='t-sm t-muted'>lo — MAX-heap (smaller half)</text><rect x='58' y='98' width='44' height='44' class='f-panel s-line'/><text x='80' y='126' text-anchor='middle' class='t-mono'>2</text><rect x='104' y='98' width='44' height='44' class='f-panel s-line'/><text x='126' y='126' text-anchor='middle' class='t-mono'>3</text><rect x='150' y='98' width='44' height='44' class='f-accent-soft s-accent'/><text x='172' y='126' text-anchor='middle' class='t-mono t-accent'>5</text><text x='172' y='166' text-anchor='middle' class='t-sm t-accent'>top = 5</text><rect x='410' y='56' width='220' height='124' rx='8' class='f-panel2 s-line'/><text x='520' y='80' text-anchor='middle' class='t-sm t-muted'>hi — MIN-heap (larger half)</text><rect x='460' y='98' width='44' height='44' class='f-ok-soft s-ok'/><text x='482' y='126' text-anchor='middle' class='t-mono t-ok'>7</text><rect x='506' y='98' width='44' height='44' class='f-panel s-line'/><text x='528' y='126' text-anchor='middle' class='t-mono'>9</text><text x='482' y='166' text-anchor='middle' class='t-sm t-ok'>top = 7</text><text x='330' y='112' text-anchor='middle' class='t-sm t-muted'>count = 5 (odd)</text><text x='330' y='142' text-anchor='middle' class='t-bold'>median = 5</text><text x='330' y='216' text-anchor='middle' class='t-sm t-muted'>invariants: max(lo) &#8804; min(hi) and |lo| &#8722; |hi| &#8712; {0, 1}</text></svg>"
+    },
+    "m08-task-windows": {
+      "caption": "**Task Scheduler on `AAABBC`, `n = 2`.** Time is processed in windows of `n+1 = 3` slots. Full windows charge all 3 slots even when one is a forced idle (slot 5); the last window charges only the real tasks placed — total time 7.",
+      "svg": "<svg viewBox='0 0 660 210' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Task scheduler cooldown windows'><text x='20' y='24' class='t-bold'>AAABBC, n = 2 &#8658; windows of n+1 = 3</text><rect x='20' y='52' width='44' height='44' class='f-accent-soft s-accent'/><text x='42' y='80' text-anchor='middle' class='t-mono t-accent'>A</text><rect x='66' y='52' width='44' height='44' class='f-panel s-line'/><text x='88' y='80' text-anchor='middle' class='t-mono'>B</text><rect x='112' y='52' width='44' height='44' class='f-panel s-line'/><text x='134' y='80' text-anchor='middle' class='t-mono'>C</text><rect x='158' y='52' width='44' height='44' class='f-accent-soft s-accent'/><text x='180' y='80' text-anchor='middle' class='t-mono t-accent'>A</text><rect x='204' y='52' width='44' height='44' class='f-panel s-line'/><text x='226' y='80' text-anchor='middle' class='t-mono'>B</text><rect x='250' y='52' width='44' height='44' class='f-bad-soft s-bad'/><text x='272' y='80' text-anchor='middle' class='t-mono t-bad'>&#8722;</text><rect x='296' y='52' width='44' height='44' class='f-accent-soft s-accent'/><text x='318' y='80' text-anchor='middle' class='t-mono t-accent'>A</text><text x='42' y='114' text-anchor='middle' class='t-sm t-muted'>0</text><text x='88' y='114' text-anchor='middle' class='t-sm t-muted'>1</text><text x='134' y='114' text-anchor='middle' class='t-sm t-muted'>2</text><text x='180' y='114' text-anchor='middle' class='t-sm t-muted'>3</text><text x='226' y='114' text-anchor='middle' class='t-sm t-muted'>4</text><text x='272' y='114' text-anchor='middle' class='t-sm t-muted'>5</text><text x='318' y='114' text-anchor='middle' class='t-sm t-muted'>6</text><line x1='20' y1='136' x2='156' y2='136' class='s-accent' stroke-width='2'/><line x1='160' y1='136' x2='294' y2='136' class='s-accent' stroke-width='2'/><line x1='298' y1='136' x2='340' y2='136' class='s-muted' stroke-width='2'/><text x='88' y='158' text-anchor='middle' class='t-sm t-accent'>window 1</text><text x='227' y='158' text-anchor='middle' class='t-sm t-accent'>window 2</text><text x='319' y='158' text-anchor='middle' class='t-sm t-muted'>last</text><text x='380' y='80' class='t-bold'>time = 7</text><text x='380' y='110' class='t-sm t-muted'>last window: no idle padding</text><text x='20' y='192' class='t-sm t-muted'>idle appears only when the heap runs out of distinct tasks mid-window</text></svg>"
+    }
+  }
+}

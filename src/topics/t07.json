@@ -1,0 +1,259 @@
+{
+  "tag": "m07",
+  "week": "Week 3 · Module 07",
+  "title": "Tries",
+  "priority": "moderate",
+  "summary": "When a problem says **prefix**, **starts with**, or **dictionary lookup**, it is telling you to build a Trie — a tree where every edge is a character and every root-to-node path is a prefix. You already have some Trie reps, so this module locks in a bug-free template you can type from muscle memory, plus the two clever variants that decide harder OAs: **word search on a board** and the **XOR bit-trie**.",
+  "notes": [
+    {
+      "heading": "When a Trie is the tell",
+      "body": "Most data-structure choices in an OA are announced by a keyword, and the Trie's keyword is the loudest of all: **prefix**. Train yourself to hear it in every disguise:\n\n- The statement mentions **prefixes**, **\"starts with\"**, **dictionary / word lookup**, or **auto-complete**.\n- You must answer **many string queries against one fixed set of words**. A Trie amortizes shared prefixes, so each lookup costs $O(L)$ — the *word's* length — no matter whether the set holds ten words or a hundred thousand.\n- You're doing **DFS on a letter grid while matching a word list** (Word Search II). A Trie lets one board walk prune *every* word sharing a dead prefix at once, instead of re-searching per word.\n- The problem asks to **maximize or minimize XOR over pairs**, or make greedy bit-by-bit decisions. That's a **binary trie built over the bits** of each number — strings of 0s and 1s instead of letters.\n\n> [!KEY]\n> A Trie earns its keep exactly when **prefixes matter**. A hash set answers \"is this whole word present?\" in $O(L)$ too — the Trie's superpower is answering questions about *partial* words: counts under a prefix, shortest root, wildcard branching, all-words-sharing-this-path.\n\nJust as important is knowing when **not** to reach for it:\n\n- Single-string pattern matching → that's KMP/Z territory, not a Trie.\n- If prefixes never matter and you only test whole-word membership, an `unordered_set<string>` is simpler, just as fast, and less code to get wrong.\n\n> [!EXAM]\n> In a timed OA, reaching for a Trie when a hashset suffices costs you ten minutes of typing and a memory-heavy solution. Ask one question before building: *\"do I ever query something shorter than a whole word?\"* If no — hashset. If yes — Trie, no hesitation."
+    },
+    {
+      "heading": "Anatomy: edges are characters, paths are prefixes",
+      "body": "Picture a tree where the **root is the empty string** and every edge you walk appends one character. Any node you stand on *is* a prefix — the one spelled by the path from the root. Insert `\"app\"`, `\"apt\"`, and `\"cap\"` and the shared `\"ap\"` prefix is stored **once**; the two words split only at the last letter.\n\n[[fig:m07-trie-paths]]\n\n> [!ANALOGY]\n> A Trie is a phone-menu tree: \"press *a*, then *p*…\". Every caller who wants a word starting with `ap` walks the *same* first two menu levels. The tree never stores `\"app\"` and `\"apt\"` separately up to the split — it stores the shared road once and forks at the end.\n\nTwo design decisions define the node:\n\n1. **Children storage.** A fixed array `child[26]` for lowercase letters (fast, cache-friendly), or an `unordered_map<char, TrieNode*>` when the alphabet is large or unknown. In OAs it's almost always the array.\n2. **The `isEnd` flag.** Every node is a *prefix*, but only some prefixes are *words*. `isEnd = true` marks \"a real inserted word terminates exactly here.\" This one boolean is the difference between `search` and `startsWith`.\n\nHere is the template to burn into muscle memory:\n\n```cpp\nstruct TrieNode {\n    TrieNode* child[26] = {};   // child[c] == nullptr means no edge for letter c\n    bool isEnd = false;         // true if a word ends exactly here\n    // Optional extras used by harder problems:\n    // int passCount = 0;       // how many words pass through this node (prefix count)\n    // int endCount  = 0;       // how many words end here (for duplicates)\n};\n\nstruct Trie {\n    TrieNode* root = new TrieNode();\n\n    void insert(const string& w) {\n        TrieNode* cur = root;\n        for (char ch : w) {\n            int c = ch - 'a';\n            if (!cur->child[c]) cur->child[c] = new TrieNode();\n            cur = cur->child[c];\n            // cur->passCount++;   // if you need prefix counts\n        }\n        cur->isEnd = true;\n    }\n\n    // exact word present?\n    bool search(const string& w) {\n        TrieNode* cur = walk(w);\n        return cur && cur->isEnd;\n    }\n\n    // any word with this prefix?\n    bool startsWith(const string& p) {\n        return walk(p) != nullptr;\n    }\n\nprivate:\n    // follow the path for s; return the node it ends at, or nullptr if it breaks\n    TrieNode* walk(const string& s) {\n        TrieNode* cur = root;\n        for (char ch : s) {\n            int c = ch - 'a';\n            if (!cur->child[c]) return nullptr;\n            cur = cur->child[c];\n        }\n        return cur;\n    }\n};\n```\n\nNotice the shape: **one private `walk` helper**, and both public queries are one-liners on top of it. That factoring is what makes the template hard to get wrong under time pressure.\n\n> [!EXAMPLE]\n> Insert `\"apple\"` only. Now trace: `search(\"app\")` → `walk` reaches the `p` node fine, but `isEnd` there is **false** → returns `false`. `startsWith(\"app\")` → the node exists → `true`. `search(\"apple\")` → node exists *and* `isEnd` is true → `true`. If your implementation gives any other trio of answers, you have the classic bug.\n\n**Complexity.** `insert`, `search`, and `startsWith` are all $O(L)$ where $L$ is the string's length — the alphabet size is a constant factor, not part of the input. Space is $O(\\text{total characters} \\times 26)$ in the worst case, because each node carries the full child array.\n\n> [!PITFALL]\n> The single most common Trie bug: returning `walk(w) != nullptr` from `search`. That makes `search(\"app\")` return true after inserting only `\"apple\"` — you've silently turned `search` into `startsWith`. Test both calls explicitly before submitting."
+    },
+    {
+      "heading": "The extras harder problems bolt on",
+      "body": "The base template is rarely the whole answer. Harder ladder problems each add **one small field to the node** — recognize which field the problem is asking for:\n\n- **`passCount`** — increment on every node you *pass through* during insert. Now \"how many words start with prefix $p$?\" is a single $O(|p|)$ walk that reads one counter. This is exactly Implement Trie II and the heart of Map Sum Pairs (store a value instead of a count and sum over the subtree — or, cleaner, add the *delta* to every node on the path when a key is overwritten).\n- **`endCount`** — increment at the terminal node, so duplicates are counted and `erase` becomes \"walk down, decrement counters.\" No node deletion needed for correctness.\n- **`string word`** on the terminal node — store the whole word there. When a DFS lands on the node, it can emit the word without reconstructing the path. This is the trick that makes Word Search II clean.\n- **map children** — swap `child[26]` for `unordered_map<char, TrieNode*>` when the alphabet is Unicode, digits + letters, or unknown. Same logic, different lookup.\n\n> [!NOTE]\n> All of these are *additive*: the insert/walk skeleton never changes. When you practice, type the base template first, then splice in the one extra field the problem needs. That habit keeps your OA code short and your bugs local.\n\n> [!EXAMPLE]\n> Replace Words wants each word replaced by its **shortest** dictionary root. Insert all roots; for each sentence word, walk letter by letter and **stop at the first node with `isEnd == true`** — the walk order guarantees the shortest root wins. One extra `if` inside the walk; nothing else changes."
+    },
+    {
+      "heading": "The binary trie: XOR problems in disguise",
+      "body": "Here's the variant that looks nothing like strings but is the same data structure: treat every integer as a **30-bit string of 0s and 1s, most-significant bit first**, and insert it into a Trie with two children per node. You've never needed this before — it's the standard weapon for \"maximum XOR of a pair\" problems, and it shows up in hard OA sets.\n\nWhy MSB-first matters: XOR is decided bit by bit, and **a higher bit outweighs all lower bits combined** ($2^b > 2^{b-1} + \\dots + 1$). So to maximize `x XOR y`, walk down from the top bit and greedily steer toward the child holding the **opposite** of `x`'s bit — every time you succeed, you lock in $2^b$ and nothing below can make you regret it.\n\n[[fig:m07-bit-greedy]]\n\n```cpp\nstruct BitTrie {\n    BitTrie* child[2] = {};     // child[0] and child[1] for bit 0 / bit 1\n};\n\nconst int BITS = 30;            // enough for values < ~1e9; use 31/32 for larger\n\nvoid insert(BitTrie* root, int x) {\n    BitTrie* cur = root;\n    for (int b = BITS; b >= 0; --b) {           // MOST significant bit first\n        int bit = (x >> b) & 1;\n        if (!cur->child[bit]) cur->child[bit] = new BitTrie();\n        cur = cur->child[bit];\n    }\n}\n\n// max XOR of x with any number already inserted\nint queryMaxXor(BitTrie* root, int x) {\n    BitTrie* cur = root;\n    int res = 0;\n    for (int b = BITS; b >= 0; --b) {\n        int bit = (x >> b) & 1;\n        int want = bit ^ 1;                     // greedily try the OPPOSITE bit\n        if (cur->child[want]) { res |= (1 << b); cur = cur->child[want]; }\n        else                    cur = cur->child[bit];\n    }\n    return res;\n}\n```\n\n> [!KEY]\n> The greedy is *provably* optimal only because you process bits **high to low**. Securing bit $b$ is worth more than every bit below it combined, so grabbing the opposite bit when it exists can never be a mistake.\n\n> [!PITFALL]\n> Two ways this template dies: (1) iterating bits **LSB-first** — the trie levels no longer correspond to the bits you're testing and the greedy priority inverts; (2) choosing a bit width too small for the max value. Use 30 bits for values under $\\sim 10^9$, and be careful with the sign bit if values can use all 32 bits."
+    },
+    {
+      "heading": "Pitfalls, memory, and how to narrate",
+      "body": "The Trie template is short, which means every bug is one of the same five. Check them like a pre-flight list:\n\n- **`isEnd` off-by-one.** `search(\"app\")` must be false when only `\"apple\"` was inserted. `startsWith` says yes; `search` demands `isEnd`.\n- **`ch - 'a'` assumes lowercase.** Confirm the alphabet before typing. Uppercase, digits, or mixed input → widen the array or switch to a map — and *say the assumption out loud* in an interview.\n- **Empty string.** Inserting `\"\"` just sets `root->isEnd`. Decide whether the problem allows it before your loops run zero times by accident.\n- **XOR trie: MSB-first, fixed width.** Both halves matter (see the previous section).\n- **Word Search II: restore and dedupe.** Forgetting `board[i][j] = ch` after the DFS corrupts every later search; forgetting to clear `node->word` emits duplicates. These two are *the* classic bugs of the hardest Trie problem.\n\n> [!WARNING]\n> In C++, every `new TrieNode()` leaks unless freed. For an OA nobody cares — but if an interviewer asks, mention a destructor that DFS-deletes children, or `unique_ptr<TrieNode> child[26]`. Knowing the answer exists is usually enough.\n\n> [!EXAM]\n> Narration script for Microsoft/Flipkart rounds: *\"The keyword is **prefix**, so I'll use a Trie — insert and lookup are O(word length). For the board problem I'll walk the Trie and the grid together so shared prefixes are explored once, and I'll prune dead Trie branches as words are found.\"* Naming the pattern and its complexity in the first thirty seconds signals you've seen it before — that's points before you write a line."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Implement Trie (Prefix Tree)",
+      "url": "https://leetcode.com/problems/implement-trie-prefix-tree/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The canonical `insert`/`search`/`startsWith` — retype it until your fingers produce it without thinking."
+    },
+    {
+      "name": "Implement Trie II (Prefix Tree)",
+      "url": "https://leetcode.com/problems/implement-trie-ii-prefix-tree/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Adds `countWordsEqualTo` / `countWordsStartingWith` and `erase` — drills the `passCount`/`endCount` counters."
+    },
+    {
+      "name": "Longest Common Prefix",
+      "url": "https://leetcode.com/problems/longest-common-prefix/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Solvable without a Trie, but do it *with* one: the LCP is the path before the first branch or `isEnd`."
+    },
+    {
+      "name": "Design Add and Search Words Data Structure",
+      "url": "https://leetcode.com/problems/design-add-and-search-words-data-structure/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "On `.` branch a DFS into all 26 children; on a normal letter walk the single edge."
+    },
+    {
+      "name": "Replace Words",
+      "url": "https://leetcode.com/problems/replace-words/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Insert the roots, then walk each word and stop at the **first** `isEnd` — shortest root wins by walk order."
+    },
+    {
+      "name": "Map Sum Pairs",
+      "url": "https://leetcode.com/problems/map-sum-pairs/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Store values on nodes and sum over the prefix subtree (or push the delta down the path on insert)."
+    },
+    {
+      "name": "Search Suggestions System",
+      "url": "https://leetcode.com/problems/search-suggestions-system/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "After each typed char, DFS from the prefix node for the 3 lexicographically smallest words."
+    },
+    {
+      "name": "Word Break",
+      "url": "https://leetcode.com/problems/word-break/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "DP over positions that pairs beautifully with a Trie: one walk from `i` tests all dictionary prefixes."
+    },
+    {
+      "name": "Longest Word in Dictionary",
+      "url": "https://leetcode.com/problems/longest-word-in-dictionary/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "A word is buildable only if **every** prefix is also a word — DFS only through `isEnd` nodes."
+    },
+    {
+      "name": "Maximum XOR of Two Numbers in an Array",
+      "url": "https://leetcode.com/problems/maximum-xor-of-two-numbers-in-an-array/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "The flagship binary-trie greedy: insert bits MSB-first, then grab the opposite bit at every level."
+    },
+    {
+      "name": "Word Search II",
+      "url": "https://leetcode.com/problems/word-search-ii/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "One board DFS walking the Trie in lockstep — store the word on the node, clear it to dedupe, prune dead leaves."
+    },
+    {
+      "name": "Concatenated Words",
+      "url": "https://leetcode.com/problems/concatenated-words/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Trie + DP: sort by length, then test whether each word splits into ≥2 shorter dictionary words."
+    },
+    {
+      "name": "Palindrome Pairs",
+      "url": "https://leetcode.com/problems/palindrome-pairs/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Reversed-word Trie plus palindrome checks on the leftover halves — genuinely tricky, budget real time."
+    },
+    {
+      "name": "Maximum XOR With an Element From Array",
+      "url": "https://leetcode.com/problems/maximum-xor-with-an-element-from-array/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Offline queries: sort by limit, insert numbers into the bit-trie only as the limit sweep passes them."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Word Search II** — given a board of letters and a list of words, return every word that can be traced through adjacent cells, without reusing a cell within one word.",
+      "url": "https://leetcode.com/problems/word-search-ii/",
+      "tag": "trie-backtracking",
+      "answer": "**Why the naive approach dies.** The obvious plan is to run Word Search I once per word. For $W$ words each doing a full-board DFS, that's $O(W \\times \\text{cells} \\times 4^{\\text{maxLen}})$. With hundreds of words it's hopeless — and notice *why* it's wasteful: words sharing a prefix (`\"oath\"`, `\"oats\"`) force you to redo the exact same board exploration for the shared letters.\n\n> [!INTUITION]\n> Flip the loop inside-out. Instead of \"for each word, search the board,\" do **one DFS over the board, walking the Trie in lockstep**. The Trie has already merged every shared prefix, so a single board path checks *all* words with that prefix simultaneously. The instant the current board letter has no matching Trie child, you stop — and that one check kills an entire family of words at once.\n\n[[fig:m07-board-lockstep]]\n\n**The trick, step by step.**\n\n1. Insert all words into a Trie, storing the **full word on the terminal node** (`node->word`) so you never reconstruct it from the path.\n2. DFS from every cell, carrying the current Trie node alongside the board position. Step to a neighbor only if `node->child[letter]` exists.\n3. When you land on a node whose `word` is non-empty, record it and **clear it** (`node->word = \"\"`) — automatic deduplication, no set needed.\n4. Mark cells visited by temporarily overwriting the board char with `'#'`, and restore it on backtrack.\n5. Optional but powerful: after collecting a word, **prune leaf Trie nodes** with no children, so future paths die even faster.\n\n```cpp\nvoid dfs(vector<vector<char>>& b, int i, int j, TrieNode* node, vector<string>& out) {\n    char ch = b[i][j];\n    if (ch == '#' || !node->child[ch - 'a']) return;   // wall or no matching word\n    node = node->child[ch - 'a'];\n    if (!node->word.empty()) {                          // found a whole word\n        out.push_back(node->word);\n        node->word.clear();                             // dedupe: never emit twice\n    }\n    b[i][j] = '#';                                      // mark visited\n    int dx[] = {0,0,1,-1}, dy[] = {1,-1,0,0};\n    for (int d = 0; d < 4; ++d) {\n        int ni = i + dx[d], nj = j + dy[d];\n        if (ni >= 0 && ni < b.size() && nj >= 0 && nj < b[0].size())\n            dfs(b, ni, nj, node, out);\n    }\n    b[i][j] = ch;                                       // restore (backtrack)\n}\n```\n\n**Complexity.** Roughly $O(\\text{cells} \\times 4 \\times 3^{\\text{maxLen}-1})$ in the worst case — after the first step each cell has at most 3 unvisited neighbors — but Trie pruning makes it far faster in practice because dead prefixes are cut instantly. Space is $O(\\text{total letters in all words})$ for the Trie.\n\n**What generalizes.** \"Merge many patterns into one structure, then run the expensive search **once**, pruning against the structure\" — the same idea powers multi-pattern matching everywhere. And the two classic bugs to check before submitting: restore `b[i][j]`, clear `node->word`."
+    },
+    {
+      "q": "**Maximum XOR of Two Numbers in an Array** — find the maximum value of `a XOR b` over all pairs of elements in an integer array.",
+      "url": "https://leetcode.com/problems/maximum-xor-of-two-numbers-in-an-array/",
+      "tag": "bit-trie",
+      "answer": "**Why the naive approach dies.** Checking all pairs is $O(n^2)$ — fine at $n = 2000$, dead at the $n = 2 \\times 10^5$ that OAs love: that's $4 \\times 10^{10}$ operations.\n\n> [!KEY]\n> XOR is decided **bit by bit, most-significant first**, and a set bit at position $b$ contributes $2^b$ — more than *all lower bits combined*. So a greedy that walks from the top bit and grabs \"the opposite of my bit, if any inserted number has it\" is provably optimal: securing a high bit can never be regretted, no matter what happens below.\n\n**The algorithm.**\n\n1. Insert every number into a **binary trie**, MSB → LSB, at a fixed depth (30 bits covers values under $\\sim 10^9$).\n2. For each `x`, walk down from the root. At bit $b$, try the child holding the **opposite** of `x`'s bit — if it exists, take it and OR $2^b$ into the running answer; otherwise you're forced down the same-bit child and that bit of the answer stays 0.\n3. The answer is the max over all `x` of that query.\n\n[[fig:m07-bit-greedy]]\n\n```cpp\nstruct BitTrie {\n    BitTrie* child[2] = {};     // child[0] and child[1] for bit 0 / bit 1\n};\n\nconst int BITS = 30;            // enough for values < ~1e9; use 31/32 for larger\n\nvoid insert(BitTrie* root, int x) {\n    BitTrie* cur = root;\n    for (int b = BITS; b >= 0; --b) {           // MOST significant bit first\n        int bit = (x >> b) & 1;\n        if (!cur->child[bit]) cur->child[bit] = new BitTrie();\n        cur = cur->child[bit];\n    }\n}\n\n// max XOR of x with any number already inserted\nint queryMaxXor(BitTrie* root, int x) {\n    BitTrie* cur = root;\n    int res = 0;\n    for (int b = BITS; b >= 0; --b) {\n        int bit = (x >> b) & 1;\n        int want = bit ^ 1;                     // greedily try the OPPOSITE bit\n        if (cur->child[want]) { res |= (1 << b); cur = cur->child[want]; }\n        else                    cur = cur->child[bit];\n    }\n    return res;\n}\n```\n\n**Complexity.** $O(n \\times \\text{BITS})$ — about $30n$ operations, effectively linear. Space is $O(n \\times \\text{BITS})$ for the trie nodes.\n\n**The Hard follow-up** (*Maximum XOR With an Element From Array*): each query `(x, limit)` restricts you to elements $\\le$ `limit`. The trick is to go **offline**: sort the queries by limit and the array by value, then sweep — insert numbers into the trie only as the limit passes them, answering each query against a trie that contains *exactly* the eligible elements. This \"sort queries + monotonic insertion pointer\" pattern is worth recognizing on its own; it converts per-query filtering into one linear pass."
+    },
+    {
+      "q": "**Design Add and Search Words Data Structure** — support `addWord(word)` and `search(query)`, where the query may contain `.` characters, each matching any single letter.",
+      "url": "https://leetcode.com/problems/design-add-and-search-words-data-structure/",
+      "tag": "wildcard-dfs",
+      "answer": "**Why it's tricky.** The plain `walk` helper breaks the instant it meets `.` — there is no single child to follow. A hashset of whole words can't help either, because `.` means the query matches a whole *family* of words. You need to explore **all** possibilities, but only at the wildcard positions.\n\n> [!INTUITION]\n> Turn `walk` into a **DFS**. On a normal character, descend the one matching child (fail fast if it's null — that's most of your speed). On `.`, fan out into **every non-null child** and recurse; the search succeeds if *any* branch reaches the end of the query on an `isEnd` node. The Trie keeps the fan-out cheap because in real data most of the 26 children don't exist.\n\n[[fig:m07-wildcard-branch]]\n\n```cpp\nbool dfs(TrieNode* node, const string& w, int i) {\n    if (!node) return false;\n    if (i == w.size()) return node->isEnd;\n    char ch = w[i];\n    if (ch == '.') {                             // wildcard: try every child\n        for (int c = 0; c < 26; ++c)\n            if (node->child[c] && dfs(node->child[c], w, i + 1)) return true;\n        return false;\n    }\n    return dfs(node->child[ch - 'a'], w, i + 1); // fixed letter: one path\n}\n```\n\nNote the two base cases, in order: a null node means the path broke (`false`); reaching the end of the query means the answer is exactly `node->isEnd` — not `true`! Reaching a *prefix* of a stored word is not a match.\n\n**Complexity.** A no-wildcard search is $O(L)$. The theoretical worst case with all dots is $O(26^L)$, but actual inputs branch rarely, so it runs fast in practice. Space is just the Trie.\n\n**What generalizes.** \"Deterministic walk + controlled branching at uncertainty points\" is the skeleton of every Trie-DFS hybrid — Word Search II branches on board neighbors, this problem branches on `.`, regex-lite matchers branch on character classes. Master this one and the family opens up."
+    },
+    {
+      "q": "**Concatenated Words** — given a list of distinct words, return every word that can be formed by concatenating **at least two** other (shorter) words from the same list.",
+      "url": "https://leetcode.com/problems/concatenated-words/",
+      "tag": "trie-dp",
+      "answer": "**Why naive fails.** For each word, trying every split into two halves recursively explodes; and hashing every substring `s[i..j]` against a set costs $O(L^2)$ substring constructions *per word*, each $O(L)$ to hash — the constants pile up fast at $10^4$ words.\n\n> [!KEY]\n> Two observations tame it. First, a concatenated word is strictly **longer than its parts** — so process words shortest-first, and each word only needs to be built from words already inserted. Second, \"can the prefix of length $k$ be split into dictionary words?\" is a classic **Word-Break DP**, and a Trie answers \"which dictionary words start at position $i$?\" with **one downward walk** instead of one hash lookup per substring.\n\n**The algorithm.**\n\n1. Sort the words by length, ascending.\n2. For each word `s`: run `dp[k]` = \"the prefix `s[0..k)` splits into inserted dictionary words,\" with `dp[0] = true`. To fill it, from every reachable position `i` walk the Trie along `s[i..]`; every time you pass a node with `isEnd`, mark `dp[j+1] = true` for that end position `j`.\n3. The word qualifies if `dp[len]` is true using **at least two** pieces — since the word itself isn't inserted yet when tested (shortest-first order), any successful split automatically uses other words.\n4. Insert `s` into the Trie and move on.\n\n```cpp\nstruct TrieNode {\n    TrieNode* child[26] = {};\n    bool isEnd = false;\n};\n\nclass Solution {\n    TrieNode* root = new TrieNode();\n\n    void insert(const string& w) {\n        TrieNode* cur = root;\n        for (char ch : w) {\n            int c = ch - 'a';\n            if (!cur->child[c]) cur->child[c] = new TrieNode();\n            cur = cur->child[c];\n        }\n        cur->isEnd = true;\n    }\n\n    bool canForm(const string& s) {\n        int n = s.size();\n        if (n == 0) return false;\n        vector<char> dp(n + 1, false);\n        dp[0] = true;                       // empty prefix splits trivially\n        for (int i = 0; i < n; ++i) {\n            if (!dp[i]) continue;           // position i unreachable\n            TrieNode* cur = root;\n            for (int j = i; j < n; ++j) {   // one walk enumerates all words at i\n                int c = s[j] - 'a';\n                if (!cur->child[c]) break;  // no dictionary word continues\n                cur = cur->child[c];\n                if (cur->isEnd) dp[j + 1] = true;\n            }\n        }\n        return dp[n];\n    }\n\npublic:\n    vector<string> findAllConcatenatedWordsInADict(vector<string>& words) {\n        sort(words.begin(), words.end(),\n             [](const string& a, const string& b) { return a.size() < b.size(); });\n        vector<string> res;\n        for (const string& w : words) {\n            if (canForm(w)) res.push_back(w);   // built ONLY from shorter words\n            insert(w);                          // insert AFTER testing\n        }\n        return res;\n    }\n};\n```\n\nThe \"insert **after** testing\" line is what enforces the *at least two other words* rule — when `canForm(w)` runs, `w` itself isn't in the Trie, so any successful split necessarily uses other (shorter) words, and a single-piece \"split\" is impossible.\n\n**Complexity.** About $O(n \\times L^2)$ for $n$ words of length up to $L$ — for each word, each start position launches one Trie walk of at most $L$ steps. The Trie replaces per-substring hashing with a clean pointer walk, a much smaller constant. Space is the Trie: $O(\\text{total characters} \\times 26)$.\n\n**What generalizes.** Word Break, Word Break II, and this problem are one family: **DP over cut positions, with a Trie (or hashset) certifying pieces**. Whenever a string must be tiled by dictionary units, reach for this exact skeleton."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA gives you $10^5$ dictionary words and $10^5$ queries, each asking *\"how many words start with prefix $p$?\"* Which approach answers each query in $O(|p|)$, independent of the number of words?",
+      "options": [
+        "An `unordered_set` of all words — check membership of each prefix",
+        "Sort the words and binary-search the prefix range for every query",
+        "A Trie whose nodes carry a `passCount` incremented on every insert step",
+        "A suffix array built over the concatenation of all words"
+      ],
+      "answer": 2,
+      "explanation": "Walking the Trie along $p$ and reading `passCount` at the final node is exactly $O(|p|)$ — the word count never appears in the bound. The hashset can only test whole-word membership, not count prefix matches. Sorting + binary search *does* work but costs $O(|p| \\log n)$ per query and can't absorb insertions cheaply. A suffix array answers substring questions — massive overkill for prefixes.",
+      "tag": "pattern"
+    },
+    {
+      "q": "You \"simplify\" the template so that `search` returns `walk(w) != nullptr`. After `insert(\"apple\")`, which call now gives a **wrong** answer?",
+      "options": [
+        "`search(\"apple\")` — it returns false",
+        "`search(\"app\")` — it returns true",
+        "`startsWith(\"app\")` — it returns false",
+        "None; the two functions are equivalent"
+      ],
+      "answer": 1,
+      "explanation": "Dropping the `isEnd` check turns `search` into `startsWith`: the node for \"app\" exists (it's on the path to \"apple\"), so `search(\"app\")` wrongly reports the word present. `search(\"apple\")` still works — the node exists — which is exactly why this bug slips through lazy testing. Always test a strict prefix of an inserted word.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "In `queryMaxXor` you rewrite the loop as `for (int b = 0; b <= BITS; ++b)` (LSB first) while `insert` still runs MSB first. What happens?",
+      "options": [
+        "`res` overflows for large inputs",
+        "It only fails when the array contains negative numbers",
+        "It still returns the right answer, just with worse cache behavior",
+        "The walk descends levels keyed by the wrong bits, so the traversal itself is broken — not just the greedy order"
+      ],
+      "answer": 3,
+      "explanation": "Trie level $d$ stores bit $\\text{BITS}-d$ because insert went MSB-first. Querying LSB-first compares bit 0 against the level that stores bit 30, so the pointer walk follows edges that mean something else entirely — garbage answers, not merely suboptimal ones. And even with a matching LSB-first insert, the greedy would be wrong: low bits would be locked in before high bits, inverting the priority $2^b > 2^{b-1} + \\dots + 1$.",
+      "tag": "bit-trie"
+    },
+    {
+      "q": "You insert $n$ lowercase words with $C$ total characters into an array-child Trie. What are the build time and worst-case space?",
+      "options": [
+        "$O(C)$ time, $O(26 \\cdot C)$ space",
+        "$O(26 \\cdot C)$ time, $O(C)$ space",
+        "$O(n \\log n)$ time, $O(n)$ space",
+        "$O(C^2)$ time, $O(C)$ space"
+      ],
+      "answer": 0,
+      "explanation": "Each inserted character does $O(1)$ work (index into `child`, maybe allocate), so building is $O(C)$ — the 26 never multiplies *time* because array indexing is constant. It multiplies *space*: in the worst case (no shared prefixes) you allocate up to $C$ nodes, each carrying a 26-pointer array, hence $O(26 \\cdot C)$. Sorting bounds ($n \\log n$) have nothing to do with Tries.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Trace it: `insert(\"app\"); insert(\"apple\");` then call `search(\"appl\")` and `startsWith(\"appl\")`. What do they return, in that order?",
+      "options": [
+        "true, true",
+        "false, false",
+        "false, true",
+        "true, false"
+      ],
+      "answer": 2,
+      "explanation": "The node for \"appl\" exists — it sits on the path to \"apple\" — so `startsWith(\"appl\")` is true. But no inserted word *ends* there: `isEnd` is true at \"app\" and at \"apple\", not in between, so `search(\"appl\")` is false. Option D is impossible in any correct Trie: `search(x)` true forces `startsWith(x)` true, since the exact word is its own prefix.",
+      "tag": "trace"
+    },
+    {
+      "q": "In your Word Search II DFS you delete the last line, `b[i][j] = ch;` (the restore after exploring neighbors). What's the symptom?",
+      "options": [
+        "Infinite recursion, since cells are never marked visited",
+        "Cells stay `'#'` forever, so later paths are blocked and valid words go missing from the output",
+        "The same word appears multiple times in the output",
+        "Undefined behavior from writing outside the board"
+      ],
+      "answer": 1,
+      "explanation": "The `'#'` write is the *visited* mark; the restore is what un-marks it when the DFS backtracks. Without the restore, every explored cell remains a permanent wall, so subsequent starting cells and branches see a corrupted board and miss real words. Marking still happens, so there's no infinite recursion — and duplicates are the symptom of the *other* classic bug, forgetting to clear `node->word`.",
+      "tag": "backtracking-bug"
+    },
+    {
+      "q": "For Design Add and Search Words, what is the worst-case time for one `search` on a query of length $L$ that is **all dots**, against an adversarially full Trie?",
+      "options": [
+        "$O(26^L)$ — every dot can branch into up to 26 children",
+        "$O(L)$ — the Trie guarantees linear lookups",
+        "$O(26 \\cdot L)$ — 26 tries per position",
+        "$O(L^2)$ — each dot rescans the query"
+      ],
+      "answer": 0,
+      "explanation": "Each `.` multiplies the live branches by up to 26, and $L$ dots compound: $26^L$ paths in the worst case. The $O(L)$ guarantee only holds for wildcard-free queries, where each step follows exactly one child. $O(26L)$ is the tempting trap — it assumes the branches don't *nest*, but each branch recurses into its own subtree. In practice most children are null, so real inputs stay fast; the bound is about the adversarial case.",
+      "tag": "wildcard"
+    }
+  ],
+  "figures": {
+    "m07-trie-paths": {
+      "caption": "Three inserts, one shared road: `\"app\"` and `\"apt\"` share the `a → p` path and fork only at the last letter. Green nodes have `isEnd = true` — that flag, not node existence, is what `search` checks.",
+      "svg": "<svg viewBox=\"0 0 660 360\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Trie containing the words app, apt and cap, with shared prefix paths and isEnd markers\"><text x=\"20\" y=\"24\" class=\"t-bold\">insert(\"app\"), insert(\"apt\"), insert(\"cap\")</text><circle cx=\"330\" cy=\"70\" r=\"17\" class=\"f-panel2 s-line\"/><text x=\"330\" y=\"75\" text-anchor=\"middle\" class=\"t-sm t-muted\">rt</text><line x1=\"316\" y1=\"80\" x2=\"254\" y2=\"129\" class=\"s-line\"/><line x1=\"344\" y1=\"80\" x2=\"406\" y2=\"129\" class=\"s-line\"/><circle cx=\"240\" cy=\"140\" r=\"17\" class=\"f-panel s-line\"/><text x=\"240\" y=\"145\" text-anchor=\"middle\" class=\"t-mono\">a</text><circle cx=\"420\" cy=\"140\" r=\"17\" class=\"f-panel s-line\"/><text x=\"420\" y=\"145\" text-anchor=\"middle\" class=\"t-mono\">c</text><line x1=\"240\" y1=\"157\" x2=\"240\" y2=\"192\" class=\"s-line\"/><line x1=\"420\" y1=\"157\" x2=\"420\" y2=\"192\" class=\"s-line\"/><circle cx=\"240\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"240\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">p</text><circle cx=\"420\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"420\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">a</text><line x1=\"228\" y1=\"223\" x2=\"190\" y2=\"266\" class=\"s-line\"/><line x1=\"252\" y1=\"223\" x2=\"290\" y2=\"266\" class=\"s-line\"/><line x1=\"420\" y1=\"227\" x2=\"420\" y2=\"262\" class=\"s-line\"/><circle cx=\"180\" cy=\"280\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"180\" y=\"285\" text-anchor=\"middle\" class=\"t-mono\">p</text><circle cx=\"300\" cy=\"280\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"300\" y=\"285\" text-anchor=\"middle\" class=\"t-mono\">t</text><circle cx=\"420\" cy=\"280\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"420\" y=\"285\" text-anchor=\"middle\" class=\"t-mono\">p</text><text x=\"180\" y=\"318\" text-anchor=\"middle\" class=\"t-sm t-muted\">\"app\"</text><text x=\"300\" y=\"318\" text-anchor=\"middle\" class=\"t-sm t-muted\">\"apt\"</text><text x=\"420\" y=\"318\" text-anchor=\"middle\" class=\"t-sm t-muted\">\"cap\"</text><text x=\"520\" y=\"145\" class=\"t-sm t-muted\">shared \"ap\" road</text><text x=\"520\" y=\"171\" class=\"t-sm t-muted\">is stored once</text><circle cx=\"30\" cy=\"345\" r=\"10\" class=\"f-ok-soft s-ok\"/><text x=\"48\" y=\"350\" class=\"t-sm\">isEnd = true — a whole word ends here</text></svg>"
+    },
+    "m07-bit-greedy": {
+      "caption": "Bit-trie holding 3 (`011`) and 5 (`101`); querying **x = 6 (`110`)** walks MSB→LSB, grabbing the opposite bit whenever that child exists. Two grabs succeed, one is forced — answer `101` = 5 = 6 XOR 3.",
+      "svg": "<svg viewBox=\"0 0 660 360\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Binary trie greedy walk maximizing XOR with x equal to 6\"><text x=\"20\" y=\"24\" class=\"t-bold\">queryMaxXor(x = 110): grab the opposite bit</text><text x=\"20\" y=\"145\" class=\"t-sm t-ok\">bit2: x=1, want 0 — yes (+4)</text><text x=\"20\" y=\"215\" class=\"t-sm t-bad\">bit1: x=1, want 0 — forced 1</text><text x=\"20\" y=\"285\" class=\"t-sm t-ok\">bit0: x=0, want 1 — yes (+1)</text><circle cx=\"370\" cy=\"70\" r=\"17\" class=\"f-panel2 s-line\"/><text x=\"370\" y=\"75\" text-anchor=\"middle\" class=\"t-sm t-muted\">rt</text><line x1=\"356\" y1=\"80\" x2=\"286\" y2=\"128\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><line x1=\"384\" y1=\"80\" x2=\"474\" y2=\"128\" class=\"s-line\"/><circle cx=\"270\" cy=\"140\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"270\" y=\"145\" text-anchor=\"middle\" class=\"t-mono t-accent\">0</text><circle cx=\"490\" cy=\"140\" r=\"17\" class=\"f-panel s-line\"/><text x=\"490\" y=\"145\" text-anchor=\"middle\" class=\"t-mono\">1</text><line x1=\"270\" y1=\"157\" x2=\"270\" y2=\"188\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><line x1=\"490\" y1=\"157\" x2=\"490\" y2=\"192\" class=\"s-line\"/><circle cx=\"270\" cy=\"210\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"270\" y=\"215\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><circle cx=\"490\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"490\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">0</text><line x1=\"270\" y1=\"227\" x2=\"270\" y2=\"258\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><line x1=\"490\" y1=\"227\" x2=\"490\" y2=\"262\" class=\"s-line\"/><circle cx=\"270\" cy=\"280\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"270\" y=\"285\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><circle cx=\"490\" cy=\"280\" r=\"17\" class=\"f-panel s-line\"/><text x=\"490\" y=\"285\" text-anchor=\"middle\" class=\"t-mono\">1</text><text x=\"270\" y=\"318\" text-anchor=\"middle\" class=\"t-sm t-muted\">= 3 (011)</text><text x=\"490\" y=\"318\" text-anchor=\"middle\" class=\"t-sm t-muted\">= 5 (101)</text><text x=\"330\" y=\"350\" text-anchor=\"middle\" class=\"t-bold t-accent\">answer = 101 = 5 (6 XOR 3)</text></svg>"
+    },
+    "m07-board-lockstep": {
+      "caption": "Word Search II: the board DFS (left, tracing `o → a → t`) and the Trie pointer (right) move together. Each step is legal only if the board letter has a matching Trie child; the word is emitted the moment the pointer reaches a node carrying `word = \"oat\"`.",
+      "svg": "<svg viewBox=\"0 0 660 240\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Board DFS and Trie walk moving in lockstep to find the word oat\"><text x=\"20\" y=\"24\" class=\"t-bold\">one DFS: board cell and Trie node step together</text><rect x=\"20\" y=\"56\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"42\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-accent\">o</text><text x=\"58\" y=\"70\" text-anchor=\"middle\" class=\"t-sm t-accent\">1</text><rect x=\"66\" y=\"56\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"88\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-accent\">a</text><text x=\"104\" y=\"70\" text-anchor=\"middle\" class=\"t-sm t-accent\">2</text><rect x=\"112\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">a</text><rect x=\"20\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">e</text><rect x=\"66\" y=\"102\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"88\" y=\"130\" text-anchor=\"middle\" class=\"t-mono t-accent\">t</text><text x=\"104\" y=\"116\" text-anchor=\"middle\" class=\"t-sm t-accent\">3</text><rect x=\"112\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">e</text><rect x=\"20\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">i</text><rect x=\"66\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">h</text><rect x=\"112\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">k</text><text x=\"88\" y=\"218\" class=\"t-sm t-muted\" text-anchor=\"middle\">board path o→a→t</text><circle cx=\"300\" cy=\"110\" r=\"17\" class=\"f-panel2 s-line\"/><text x=\"300\" y=\"115\" text-anchor=\"middle\" class=\"t-sm t-muted\">rt</text><line x1=\"321\" y1=\"110\" x2=\"352\" y2=\"110\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><circle cx=\"380\" cy=\"110\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"380\" y=\"115\" text-anchor=\"middle\" class=\"t-mono t-accent\">o</text><line x1=\"401\" y1=\"110\" x2=\"432\" y2=\"110\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><circle cx=\"460\" cy=\"110\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"460\" y=\"115\" text-anchor=\"middle\" class=\"t-mono t-accent\">a</text><line x1=\"481\" y1=\"110\" x2=\"512\" y2=\"110\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><circle cx=\"540\" cy=\"110\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"540\" y=\"115\" text-anchor=\"middle\" class=\"t-mono t-ok\">t</text><text x=\"540\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-ok\">word = \"oat\"</text><text x=\"540\" y=\"178\" text-anchor=\"middle\" class=\"t-sm t-muted\">emit, then clear</text><text x=\"420\" y=\"218\" text-anchor=\"middle\" class=\"t-sm t-muted\">Trie pointer follows the same letters</text></svg>"
+    },
+    "m07-wildcard-branch": {
+      "caption": "`search(\"a.t\")`: after the fixed letter `a`, the `.` fans the DFS into **every existing child** (n, p, r). Two branches complete with `t` (`\"ant\"`, `\"art\"`); one dies (`p` has no `t` child). Any surviving branch makes the whole search true.",
+      "svg": "<svg viewBox=\"0 0 660 320\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Wildcard dot search branching into every existing trie child\"><text x=\"20\" y=\"24\" class=\"t-bold\">search(\"a.t\") — the dot fans out</text><circle cx=\"330\" cy=\"80\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"330\" y=\"85\" text-anchor=\"middle\" class=\"t-mono t-accent\">a</text><line x1=\"316\" y1=\"90\" x2=\"192\" y2=\"150\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><line x1=\"330\" y1=\"97\" x2=\"330\" y2=\"148\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><line x1=\"344\" y1=\"90\" x2=\"468\" y2=\"150\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"540\" y=\"120\" class=\"t-sm t-accent\">'.' tries every child</text><circle cx=\"170\" cy=\"170\" r=\"17\" class=\"f-panel s-line\"/><text x=\"170\" y=\"175\" text-anchor=\"middle\" class=\"t-mono\">n</text><circle cx=\"330\" cy=\"170\" r=\"17\" class=\"f-panel s-line\"/><text x=\"330\" y=\"175\" text-anchor=\"middle\" class=\"t-mono\">p</text><circle cx=\"490\" cy=\"170\" r=\"17\" class=\"f-panel s-line\"/><text x=\"490\" y=\"175\" text-anchor=\"middle\" class=\"t-mono\">r</text><line x1=\"170\" y1=\"187\" x2=\"170\" y2=\"238\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><line x1=\"330\" y1=\"187\" x2=\"330\" y2=\"228\" class=\"s-bad\" stroke-width=\"2\" stroke-dasharray=\"5 4\" marker-end=\"url(#dg-arrow-bad)\"/><line x1=\"490\" y1=\"187\" x2=\"490\" y2=\"238\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><circle cx=\"170\" cy=\"260\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"170\" y=\"265\" text-anchor=\"middle\" class=\"t-mono t-ok\">t</text><circle cx=\"490\" cy=\"260\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"490\" y=\"265\" text-anchor=\"middle\" class=\"t-mono t-ok\">t</text><text x=\"330\" y=\"252\" text-anchor=\"middle\" class=\"t-sm t-bad\">no 't' child — dead</text><text x=\"170\" y=\"300\" text-anchor=\"middle\" class=\"t-sm t-ok\">\"ant\" — match</text><text x=\"490\" y=\"300\" text-anchor=\"middle\" class=\"t-sm t-ok\">\"art\" — match</text></svg>"
+    }
+  }
+}

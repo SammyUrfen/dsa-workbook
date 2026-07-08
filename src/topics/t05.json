@@ -1,0 +1,286 @@
+{
+  "tag": "m02",
+  "week": "Week 2 · Module 02",
+  "title": "Two Pointers & Sliding Window",
+  "priority": "moderate",
+  "summary": "Two pointers turn overlapping $O(n^2)$ subarray scans into a single $O(n)$ pass — one family walks inward from both ends of sorted data, the other slides a window that grows on the right and shrinks on the left. Flipkart GRiD and Microsoft Codility lean heavily on these mediums, so drill this module for **speed**, not just understanding — the OA-flagged problems below are the most likely to appear in your actual assessments.",
+  "notes": [
+    {
+      "heading": "When this pattern fires",
+      "body": "Every problem in this module has the same skeleton: the answer lives in a **contiguous** chunk of an array or string, and brute force would re-scan overlapping ranges over and over. Two pointers and sliding windows are how you stop paying for that overlap.\n\nReach for this pattern when you spot any of these tells:\n\n- The input is **contiguous** (array, string) and the question is about a **subarray / substring** — not a subsequence.\n- Words like **longest / shortest / count of** a window satisfying a constraint: sum at most K, at most K distinct, no repeated characters.\n- The array is **sorted** (or can be sorted) and you need a **pair or triple** hitting a target — that is opposite pointers.\n- The brute force is an $O(n^2)$ or $O(n^3)$ scan over all subarrays or pairs, and each step's work **overlaps** the previous step's. That overlap is exactly what a moving window reuses.\n- You need an **in-place** partition: move zeroes, dedupe a sorted array, Dutch national flag.\n\n> [!ANALOGY]\n> A sliding window is a caterpillar crawling along the array: the head (`right`) stretches forward to eat new elements, and when the body gets too heavy — the window turns invalid — the tail (`left`) scoots up. Neither end ever moves backwards.\n\n> [!KEY]\n> Subarray/substring = contiguous = window territory. If the problem says **subsequence**, elements need not be adjacent, the window intuition breaks, and you are usually looking at DP or greedy instead. Check this before writing a single line.\n\n> [!EXAM]\n> Flipkart GRiD and Microsoft's Codility sets love sliding-window mediums. The OA-flagged problems in this ladder are among the highest-probability questions in your whole plan — drill them until you can re-type the solution from a blank editor in minutes."
+    },
+    {
+      "heading": "Family 1: opposite-direction pointers",
+      "body": "`lo` starts at the front, `hi` at the back, and they walk **toward each other**. This works on **sorted** data or on symmetric problems (palindrome checks, Container With Most Water). The engine that makes it correct: at every step, a single comparison proves that one of the two pointers can be safely discarded — so you never revisit a state, and the whole scan is $O(n)$.\n\n```cpp\n// ---------- OPPOSITE POINTERS (sorted array, find a pair summing to target) ----------\nbool twoSumSorted(const vector<int>& a, int target) {\n    int lo = 0, hi = (int)a.size() - 1;\n    while (lo < hi) {\n        int s = a[lo] + a[hi];\n        if (s == target) return true;\n        if (s < target) lo++;   // need bigger sum -> move left pointer up\n        else            hi--;   // need smaller sum -> move right pointer down\n    }\n    return false;\n}\n```\n\n[[fig:m02-opposite-pointers]]\n\n> [!INTUITION] Why moving one pointer is safe\n> Suppose `a[lo] + a[hi] > target`. Then `a[hi]` is too big to pair with `a[lo]` — and also too big to pair with anything *right* of `lo`, because those values are even larger. So `a[hi]` can never be part of the answer among the remaining candidates: discard it, `hi--`. Every step permanently eliminates one index, which is why the loop runs at most $n$ times.\n\n> [!EXAMPLE]\n> `a = [1, 3, 4, 6, 8, 11]`, `target = 10`.\n> `1+11 = 12 > 10` so `hi--`. `1+8 = 9 < 10` so `lo++`. `3+8 = 11 > 10` so `hi--`. `3+6 = 9 < 10` so `lo++`. `4+6 = 10` — found. Five comparisons instead of fifteen pairs.\n\nThe same family covers the **slow/fast same-direction write pointer** for in-place work: `slow` marks the end of the kept prefix, `fast` scans ahead, and you copy forward only what you keep (Move Zeroes, Remove Duplicates). You already write this style of loop comfortably — just *name* the pattern out loud when you use it."
+    },
+    {
+      "heading": "Family 2: the sliding window (shrink-when-invalid)",
+      "body": "`left` and `right` both start at 0. `right` expands the window one element per iteration; whenever the window becomes **invalid**, an inner loop shrinks it from the left until it is valid again. It *looks* nested and quadratic — it is not.\n\n```cpp\n// ---------- VARIABLE-SIZE SLIDING WINDOW (generic skeleton) ----------\n// Find the LONGEST window that stays valid.\nint longestValidWindow(const vector<int>& a) {\n    int left = 0, best = 0;\n    // <window state> e.g. running sum, a frequency map, a distinct-count...\n    for (int right = 0; right < (int)a.size(); right++) {\n        // 1) ADD a[right] to the window state\n        // ... update state with a[right] ...\n\n        // 2) While the window is INVALID, shrink from the left\n        while (/* window invalid */) {\n            // ... remove a[left] from state ...\n            left++;\n        }\n\n        // 3) Window is now valid: record the answer\n        best = max(best, right - left + 1);\n    }\n    return best;\n}\n```\n\n[[fig:m02-window-shrink]]\n\n> [!KEY]\n> The complexity argument you must be able to say out loud: **every index enters the window once (via `right++`) and leaves at most once (via `left++`)**. Total pointer movement is at most $2n$, so the whole thing is $O(n)$ amortized, despite the nested loops.\n\nThe *window state* is whatever lets you test validity in $O(1)$: a running sum, a `vector<int> cnt(26)` frequency table, a distinct-element counter, a last-seen-index map. Choosing the right state is 80% of solving any window problem — the loop shape never changes.\n\n> [!PITFALL]\n> Every `left++` must undo **exactly** what the matching `right` step did: decrement the same counter, subtract the same value. Asymmetric add/remove is the single most common sliding-window bug. If your window drifts, audit the add line and the remove line side by side."
+    },
+    {
+      "heading": "Fixed-size windows: k is given to you",
+      "body": "When the problem fixes the window size (maximum average of a length-`k` subarray; does any window of size `|s1|` match this anagram?), you do not need the shrink loop at all — the window slides one step per iteration: one element enters, one leaves.\n\n```cpp\n// ---------- FIXED-SIZE SLIDING WINDOW (window of exactly size k) ----------\nlong long bestFixedWindow(const vector<int>& a, int k) {\n    long long sum = 0, best = LLONG_MIN;\n    for (int i = 0; i < (int)a.size(); i++) {\n        sum += a[i];                 // add the entering element\n        if (i >= k) sum -= a[i - k]; // once the window is full, drop the leaving element\n        if (i >= k - 1) best = max(best, sum); // window [i-k+1 .. i] is complete\n    }\n    return best;\n}\n```\n\n[[fig:m02-fixed-window]]\n\n> [!PITFALL]\n> The two guards are load-bearing and *different*: subtract the leaving element only when `i >= k` (before that, nothing has left yet), and record the answer only when `i >= k - 1` (before that, the window is not full). Swap or merge them and you silently score partial windows.\n\n> [!WARNING]\n> Window sums over large arrays overflow `int`. Make the accumulator `long long` by reflex — it costs nothing, and OA judges love max-size inputs.\n\n> [!EXAM]\n> Fixed-size windows are the fastest points on a timed OA: there is no invariant to invent, just enter/leave bookkeeping. If a problem mentions a concrete window length, this template should be on screen within a minute."
+    },
+    {
+      "heading": "Longest vs shortest: where you record the answer",
+      "body": "The variable-window skeleton has one switch that flips between the two big use cases, and getting it backwards returns wrong answers with no crash to warn you.\n\n| | **Longest** valid window | **Shortest** valid window |\n|---|---|---|\n| Shrink when | window is **invalid** | window is **still valid** (greedily) |\n| Shrink loop | `while (invalid)` | `while (valid)` |\n| Record answer | **after** the shrink loop | **inside** the shrink loop |\n| Example | Longest Substring Without Repeating Characters | Minimum Size Subarray Sum |\n\nFor *longest*, the window sits at its maximum valid size right after shrinking, so you measure it then. For *shortest*, every moment the window is valid is a candidate — you squeeze it as small as it will go, measuring at each squeeze (full walkthrough in the deep dives).\n\n> [!KEY]\n> Before you code, say which side you are on: *longest-valid — shrink on invalid, record after* or *shortest-valid — shrink while valid, record inside*. One sentence, and it saves twenty minutes of debugging.\n\n> [!NOTE]\n> The shrink-while-valid form needs **monotonicity**: adding an element must only push the window toward valid, removing must only push it away (e.g. positive numbers with the invariant sum ≥ target). Negative numbers break that — then you need prefix sums plus a monotonic deque instead. Naming this caveat unprompted is an interview point-scorer."
+    },
+    {
+      "heading": "Pitfalls, edge cases, and how to narrate it",
+      "body": "**The classic bugs**, ranked by how often they cost real points:\n\n- **Window length is `right - left + 1`**, not `right - left`. Write it once, trust it forever.\n- **Asymmetric add/remove** — every `left++` must exactly undo its matching `right` update (see Family 2 above).\n- **Freq-map distinct counting:** when a count hits 0, decrement your distinct counter or `erase` the key — otherwise `map.size()` overcounts distinct elements forever.\n- **3Sum-style dedupe:** after emitting a valid pair or triple, skip duplicates on *both* pointers — `while (lo < hi && a[lo] == a[lo+1]) lo++;` — or you output repeats.\n- **Overflow:** `long long` for sums, always.\n- **Longest/shortest confusion** — the recording-point switch from the previous section.\n\n**Edge cases to name before the interviewer asks:** empty input, `k = 0`, `k` larger than the array, all-equal elements, a single element, unreachable target (return `0` or `-1` per the spec), and negative numbers — do they break the monotonicity your window relies on?\n\n> [!EXAM]\n> The narration script that wins these problems:\n> 1. Name the pattern: the answer is a contiguous subarray and brute force re-scans overlapping ranges — sliding window.\n> 2. Define the invariant precisely *before* coding: window has at most K distinct; window sum ≥ target.\n> 3. State the complexity up front: each index enters and leaves once, so $O(n)$ despite the nested loop.\n> 4. For opposite-pointer greedy moves, give the **exchange argument** — why the discarded side can never beat what you keep. Interviewers grade the justification, not just the code.\n\n> [!KEY]\n> If you see **exactly K** or **count the subarrays**, immediately float `exactly(K) = atMost(K) - atMost(K-1)` out loud. It is the highest-leverage trick in this module (see the first deep dive), and mentioning it signals real pattern fluency."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Two Sum II - Input Array Is Sorted",
+      "url": "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Opposite pointers on sorted data, the base case: sum too small → `lo++`, too big → `hi--`."
+    },
+    {
+      "name": "Valid Palindrome",
+      "url": "https://leetcode.com/problems/valid-palindrome/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Opposite pointers that skip non-alphanumeric characters before each comparison."
+    },
+    {
+      "name": "Move Zeroes",
+      "url": "https://leetcode.com/problems/move-zeroes/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Slow/fast same-direction write pointer — an in-place partition keeping the non-zero prefix."
+    },
+    {
+      "name": "Remove Duplicates from Sorted Array",
+      "url": "https://leetcode.com/problems/remove-duplicates-from-sorted-array/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "The slow write pointer owns the compacted prefix; copy forward only when the value changes."
+    },
+    {
+      "name": "Best Time to Buy and Sell Stock",
+      "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "One pass tracking min-so-far — a degenerate window where only the left edge matters."
+    },
+    {
+      "name": "Maximum Average Subarray I",
+      "url": "https://leetcode.com/problems/maximum-average-subarray-i/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The canonical fixed-size window: add the entering element, drop the leaving one."
+    },
+    {
+      "name": "Longest Substring Without Repeating Characters",
+      "url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Variable window with a last-seen map — the OA staple of this whole module."
+    },
+    {
+      "name": "Minimum Size Subarray Sum",
+      "url": "https://leetcode.com/problems/minimum-size-subarray-sum/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Shortest-valid window: shrink **while** `sum >= target` and record inside the shrink loop."
+    },
+    {
+      "name": "Container With Most Water",
+      "url": "https://leetcode.com/problems/container-with-most-water/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Opposite pointers — always move the shorter wall, and know the greedy proof (deep dive 2)."
+    },
+    {
+      "name": "3Sum",
+      "url": "https://leetcode.com/problems/3sum/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Sort + fix one element + opposite pointers for the pair — and dedupe on *both* pointers."
+    },
+    {
+      "name": "Permutation in String",
+      "url": "https://leetcode.com/problems/permutation-in-string/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Fixed window of size `|s1|` plus a 26-slot frequency match (anagram check)."
+    },
+    {
+      "name": "Longest Repeating Character Replacement",
+      "url": "https://leetcode.com/problems/longest-repeating-character-replacement/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Window valid while `(len - maxFreq) <= k`; the stale-`maxFreq` shortcut is safe (deep dive 3)."
+    },
+    {
+      "name": "Fruit Into Baskets",
+      "url": "https://leetcode.com/problems/fruit-into-baskets/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Longest window with at most 2 distinct — the at-most-K template with K hardcoded to 2."
+    },
+    {
+      "name": "Subarrays with K Different Integers",
+      "url": "https://leetcode.com/problems/subarrays-with-k-different-integers/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "The at-most-K subtraction trick: `exactly(K) = atMost(K) - atMost(K-1)` (deep dive 1)."
+    },
+    {
+      "name": "Minimum Window Substring",
+      "url": "https://leetcode.com/problems/minimum-window-substring/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "The boss problem: shortest window covering a required multiset — track `have` vs `need` counts."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Subarrays with K Different Integers** — given an integer array, count the subarrays that contain **exactly** K distinct integers.",
+      "url": "https://leetcode.com/problems/subarrays-with-k-different-integers/",
+      "tag": "at-most-k",
+      "answer": "**Why the naive window fails.** Longest window with **at most** K distinct is clean: validity is monotone, so shrink-when-invalid works. But **exactly** K has no clean valid/invalid boundary to shrink against — as `right` advances, a window can pass through exactly-K states, and counting *every* subarray ending at `right` from inside one window gets messy fast. The window machinery needs monotonicity, and exactly-K is not monotone.\n\n> [!KEY]\n> `exactly(K) = atMost(K) - atMost(K-1)`. The subarrays with exactly K distinct values are precisely the ones counted by `atMost(K)` but not by `atMost(K-1)`. Two clean windows instead of one impossible one.\n\n**Why atMost is countable.** At most K distinct *is* monotone: if a window is valid, every subarray inside it is valid too. So slide the standard window, and after restoring validity, the number of valid subarrays **ending at `right`** is exactly `right - left + 1` — every start from `left` through `right` works.\n\n[[fig:m02-count-ending-right]]\n\n```cpp\nint atMost(const vector<int>& a, int K) {\n    if (K < 0) return 0;\n    unordered_map<int,int> cnt;\n    int left = 0, res = 0;\n    for (int right = 0; right < (int)a.size(); right++) {\n        if (++cnt[a[right]] == 1) K--;      // new distinct value consumed a slot\n        while (K < 0) {                     // too many distinct -> shrink\n            if (--cnt[a[left]] == 0) K++;   // freed a slot\n            left++;\n        }\n        res += right - left + 1;            // <-- all subarrays ending at right\n    }\n    return res;\n}\nint subarraysWithKDistinct(vector<int>& a, int k) {\n    return atMost(a, k) - atMost(a, k - 1);\n}\n```\n\nNote the neat trick of spending `K` itself as a budget instead of tracking a separate distinct counter — `K < 0` *is* the invalid test.\n\n**Complexity:** $O(n)$ per `atMost` call, $O(n)$ total; space $O(K)$.\n\n**What generalizes:** the identity and the `res += right - left + 1` counting idiom reappear across the whole count-subarrays-where family — count with sum at most K, Count Nice Subarrays, subarrays bounded by a maximum. This is the single highest-leverage trick in the module."
+    },
+    {
+      "q": "**Container With Most Water** — choose two vertical lines from a height array; they hold water of area `min(height[lo], height[hi]) * (hi - lo)`. Maximize that area.",
+      "url": "https://leetcode.com/problems/container-with-most-water/",
+      "tag": "greedy-proof",
+      "answer": "**Why naive fails.** Checking all pairs is $O(n^2)$ — dead on arrival for large $n$ in a timed OA.\n\n**The greedy move.** Start `lo = 0`, `hi = n - 1` — maximum width. The area is capped by the **shorter** wall.\n\n> [!INTUITION] The exchange argument\n> Suppose `h[lo] < h[hi]` and you move the *taller* wall inward (`hi--`). The width strictly shrinks, and the height is still capped by the same short wall `h[lo]` — so the area can only stay equal or drop. Moving the taller wall can **never** help. The only move with any chance of improvement is discarding the shorter wall. That is the entire proof.\n\n[[fig:m02-shorter-wall]]\n\n```cpp\nint maxArea(vector<int>& h) {\n    int lo = 0, hi = h.size() - 1, best = 0;\n    while (lo < hi) {\n        best = max(best, min(h[lo], h[hi]) * (hi - lo));\n        if (h[lo] < h[hi]) lo++; else hi--;   // drop the shorter wall\n    }\n    return best;\n}\n```\n\n**Complexity:** $O(n)$ time, $O(1)$ space.\n\n**What generalizes:** this is the template for every opposite-pointer *greedy* — the code is trivial; the marks are in the justification. Say the exchange argument out loud in an interview (moving the taller wall cannot help, because the width shrinks while the height stays capped) and you have effectively finished the problem."
+    },
+    {
+      "q": "**Longest Repeating Character Replacement** — given an uppercase string and an integer k, find the longest substring you can make all-one-character by replacing **at most k** characters.",
+      "url": "https://leetcode.com/problems/longest-repeating-character-replacement/",
+      "tag": "window-invariant",
+      "answer": "**The invariant.** In any window, the cheapest way to make it uniform is to keep the **most frequent** character and replace all the rest. So a window is achievable iff `(windowLength - maxFreq) <= k`. That is your validity test — slide a variable window against it.\n\n**The subtle optimization** that trips everyone up: when you shrink, you do **not** recompute `maxFreq` downward (that would cost a 26-way scan each time). A stale, too-large `maxFreq` makes the validity check *lenient*, so the window may sit one step larger than truly valid — but `best` only improves when you find a **longer** valid window, and a stale `maxFreq` can never certify one of those: `best` was already recorded back when `maxFreq` was genuinely that high. The stale value cannot hurt the answer; it only spares you work.\n\n```cpp\nint characterReplacement(string s, int k) {\n    vector<int> cnt(26, 0);\n    int left = 0, maxFreq = 0, best = 0;\n    for (int right = 0; right < (int)s.size(); right++) {\n        maxFreq = max(maxFreq, ++cnt[s[right] - 'A']);\n        // if replacements needed exceed k, slide the window right by one\n        if ((right - left + 1) - maxFreq > k) {\n            cnt[s[left] - 'A']--;\n            left++;\n        }\n        best = max(best, right - left + 1);\n    }\n    return best;\n}\n```\n\nNotice it is an `if`, not a `while`: since `right` grows the window by exactly one per iteration, shrinking by one keeps the window size non-decreasing — it *slides* rather than contracts. That is only sound *because* of the stale-`maxFreq` argument above.\n\n**Complexity:** $O(n)$ time, $O(26)$ space.\n\n> [!PITFALL]\n> If you cannot explain why the stale `maxFreq` is safe, an interviewer will pull that thread. The one-line answer: `best` is monotone, and only a strictly larger `maxFreq` could certify a strictly longer window — which is exactly the moment the code updates it."
+    },
+    {
+      "q": "**Minimum Size Subarray Sum** — given a target and an array of positive integers, find the length of the shortest contiguous subarray whose sum is at least the target (0 if none exists).",
+      "url": "https://leetcode.com/problems/minimum-size-subarray-sum/",
+      "tag": "shrink-while-valid",
+      "answer": "**The contrast.** This is the flagship *shortest*-valid problem, and it flips the standard template: expand until the window becomes **valid** (`sum >= target`), then greedily **shrink while it stays valid**, recording the length at every squeeze.\n\n> [!KEY]\n> Longest-valid: `while (invalid) shrink;` then record **after**. Shortest-valid: `while (valid) { record; shrink; }`. Same skeleton, opposite trigger, opposite recording point.\n\n```cpp\nint minSubArrayLen(int target, vector<int>& a) {\n    int left = 0, best = INT_MAX; long long sum = 0;\n    for (int right = 0; right < (int)a.size(); right++) {\n        sum += a[right];\n        while (sum >= target) {              // shrink WHILE still valid\n            best = min(best, right - left + 1);\n            sum -= a[left++];\n        }\n    }\n    return best == INT_MAX ? 0 : best;\n}\n```\n\n**Why positivity matters.** With all-positive numbers, adding an element strictly grows the sum and removing one strictly shrinks it — validity is monotone in both directions, so the two-pointer sweep cannot miss an answer. With negatives, shrinking might *increase* the sum, the monotonicity dies, and this window silently returns wrong answers; you would switch to prefix sums plus a monotonic deque. Naming that caveat unprompted earns real interview credit.\n\n**Complexity:** $O(n)$ time — each index enters and leaves the window once — and $O(1)$ space.\n\n**What generalizes:** any shortest-window-satisfying-X problem where X is monotone under grow/shrink. Minimum Window Substring is the hard sibling: identical shape, but the state is a multiset of required character counts instead of a sum."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: *given a string, find the length of the longest substring containing at most K distinct characters.* Which approach fits best, and why?",
+      "options": [
+        "Sort the characters, then use opposite pointers from both ends",
+        "DP over prefixes: `dp[i]` = longest valid substring ending at `i`",
+        "Variable-size sliding window with a frequency map, shrinking while the distinct count exceeds K",
+        "Binary search on the answer length, checking each candidate length with a linear scan"
+      ],
+      "answer": 2,
+      "explanation": "Substring means contiguous, and *at most K distinct* is a monotone invariant (shrinking a valid window keeps it valid) — exactly the shrink-when-invalid window, $O(n)$. Sorting destroys contiguity, so option A answers a different problem. Binary search + check (option D) actually works but costs $O(n \\log n)$ and is strictly dominated. DP adds machinery the window makes unnecessary.",
+      "tag": "pattern"
+    },
+    {
+      "q": "The variable-window template has a `for` loop over `right` containing a `while` loop over `left`. Why is the total runtime $O(n)$ rather than $O(n^2)$?",
+      "options": [
+        "Each index enters the window once and leaves at most once, so total pointer movement is bounded by 2n",
+        "The while loop runs at most once per for iteration",
+        "The window size is bounded by the constant K",
+        "The inner loop only runs when the window is valid, which is rare"
+      ],
+      "answer": 0,
+      "explanation": "This is an amortized argument: `left` never moves backwards, so across the *entire* run it advances at most n times — even if one particular iteration shrinks many steps. Option B is false for the general template (that one-step-per-iteration behavior is the special `if`-based variant in Longest Repeating Character Replacement); options C and D describe properties the template does not rely on.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Your window currently spans `left = 2`, `right = 5`, and that window is the true optimum. A teammate's code records `best = max(best, right - left)`. What does it return for this window?",
+      "options": [
+        "4 — the code is correct",
+        "3 — one less than the correct length of 4",
+        "5 — one more than the correct length",
+        "It depends on the array contents"
+      ],
+      "answer": 1,
+      "explanation": "A window from index 2 to index 5 inclusive contains indices 2, 3, 4, 5 — four elements, so the length is `right - left + 1 = 4`. Dropping the `+ 1` yields 3. This off-by-one never crashes; it just quietly loses points, which is why you memorize `right - left + 1` as a single unit.",
+      "tag": "off-by-one"
+    },
+    {
+      "q": "You need to **count** the subarrays containing **exactly** K odd numbers. The cleanest $O(n)$ approach is:",
+      "options": [
+        "A single sliding window that expands and shrinks to maintain exactly K odd numbers",
+        "A stack of the positions of odd numbers, popped as the window slides",
+        "Fix each left endpoint and scan right until the K-th odd number appears",
+        "Compute `atMost(K) - atMost(K-1)`, where `atMost` slides a window and adds `right - left + 1` at each step"
+      ],
+      "answer": 3,
+      "explanation": "*Exactly K* is not a monotone window invariant, so a single window (option A) has no clean shrink condition. The subtraction identity converts it into two monotone at-most windows, each counting all valid subarrays ending at `right` via `right - left + 1`. Option C is a correct but $O(n^2)$-worst-case brute force; option B does not lead anywhere coherent.",
+      "tag": "counting-trick"
+    },
+    {
+      "q": "Trace the fixed-size window template on `a = [3, -1, 4, 2]` with `k = 2`. What maximum window sum does it return?",
+      "options": [
+        "4",
+        "3",
+        "6",
+        "7"
+      ],
+      "answer": 2,
+      "explanation": "The complete size-2 windows are `[3,-1] = 2`, `[-1,4] = 3`, and `[4,2] = 6`, so the answer is 6. The tempting 7 comes from pairing 3 and 4 — but they are not adjacent, and a window is contiguous by definition. If you picked 4, you likely recorded before the window was full (the `i >= k - 1` guard).",
+      "tag": "trace"
+    },
+    {
+      "q": "In Container With Most Water, the pointers sit at walls of height `h[lo] = 4` and `h[hi] = 9`. Why does the algorithm move `lo` rather than `hi`?",
+      "options": [
+        "Because `lo` has been stationary longer, and alternating the pointers guarantees O(n)",
+        "Because moving `hi` shrinks the width while the area stays capped by the shorter wall `h[lo]` — it can never produce a better area",
+        "Because taller walls must always be kept until the end of the scan",
+        "Because moving `lo` is guaranteed to increase `min(h[lo], h[hi])`"
+      ],
+      "answer": 1,
+      "explanation": "This is the exchange argument: with the shorter wall fixed at height 4, every pair reachable by moving `hi` inward has smaller width and height still capped at 4 — provably no better. Moving `lo` merely *might* help, which is enough. Option D is wrong because the next wall could be even shorter; the algorithm does not need a guaranteed improvement, only that the discarded options are provably hopeless.",
+      "tag": "greedy-proof"
+    },
+    {
+      "q": "The shrink-while-valid solution to Minimum Size Subarray Sum is correct for positive arrays. Which single change to the input breaks it?",
+      "options": [
+        "Allowing negative numbers — removing an element can then increase the sum, so validity is no longer monotone and the sweep can miss answers",
+        "A target larger than the total array sum — the while loop never fires and the code crashes",
+        "Duplicate values — the frequency map overcounts distinct elements",
+        "A single-element array — `right - left + 1` underflows"
+      ],
+      "answer": 0,
+      "explanation": "The window logic relies on adding elements only growing the sum and removing them only shrinking it; negatives destroy both directions, and the fix is prefix sums with a monotonic deque. Option B is handled gracefully (best stays `INT_MAX`, the function returns 0 — no crash). Option C is irrelevant since this problem uses a running sum, not a frequency map, and option D describes an expression that is fine at size 1.",
+      "tag": "monotonicity"
+    },
+    {
+      "q": "In Longest Repeating Character Replacement, the shrink step is a plain `if`, and `maxFreq` is never recomputed downward after `left++`. Why is the final answer still correct?",
+      "options": [
+        "The `if` can run at most k times over the whole string",
+        "`maxFreq` is implicitly recomputed by `++cnt[s[right] - 'A']` on the next iteration",
+        "It is not strictly correct — it is an approximation that LeetCode happens to accept",
+        "A stale `maxFreq` only makes the validity check lenient; it can never certify a new longer window, because `best` was already recorded when `maxFreq` was genuinely that high"
+      ],
+      "answer": 3,
+      "explanation": "The answer is monotone: you only care about windows *longer* than `best`, and a longer valid window requires a genuinely higher `maxFreq` — which is exactly when the code updates it. A stale value can leave the window one step too large, but never mints a longer wrong answer. Option B is false (`max` only ever raises it for the entering character), and the algorithm is exactly correct, not approximate.",
+      "tag": "template-detail"
+    }
+  ],
+  "figures": {
+    "m02-opposite-pointers": {
+      "caption": "Opposite pointers on the sorted array `[1, 3, 4, 6, 8, 11]` with target 10. The current sum `1 + 11 = 12` overshoots, so `hi` steps left — each comparison permanently discards one index, giving $O(n)$.",
+      "svg": "<svg viewBox=\"0 0 660 190\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Opposite pointers walking inward on a sorted array\"><text x=\"20\" y=\"24\" class=\"t-bold\">opposite pointers: target = 10</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">8</text><rect x=\"250\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent2\"/><text x=\"272\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent2\">11</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"272\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><line x1=\"42\" y1=\"148\" x2=\"42\" y2=\"122\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"42\" y=\"168\" text-anchor=\"middle\" class=\"t-sm t-accent\">lo</text><line x1=\"272\" y1=\"148\" x2=\"272\" y2=\"122\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"272\" y=\"168\" text-anchor=\"middle\" class=\"t-sm t-accent2\">hi</text><text x=\"340\" y=\"64\" class=\"t-mono\">sum = 1 + 11 = 12</text><text x=\"340\" y=\"92\" class=\"t-mono\">12 &gt; 10  -&gt;  hi--</text><text x=\"340\" y=\"124\" class=\"t-sm t-muted\">each step discards one index: O(n)</text></svg>"
+    },
+    "m02-window-shrink": {
+      "caption": "The shrink-when-invalid loop on `[1, 2, 1, 3, 2]` with the invariant *at most 2 distinct*. Pulling in `a[3] = 3` makes 3 distinct values (top, invalid); `left` advances to 2 and the window `{1, 3}` is valid again (bottom). Record `best` only after the shrink loop.",
+      "svg": "<svg viewBox=\"0 0 660 260\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A sliding window becoming invalid and shrinking from the left\"><text x=\"20\" y=\"24\" class=\"t-bold\">at most 2 distinct: grow right, shrink when invalid</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">1</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">2</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">1</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">3</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"290\" y=\"66\" class=\"t-sm\">right = 3 pulls in the 3</text><text x=\"290\" y=\"92\" class=\"t-sm t-bad\">{1, 2, 3} = 3 distinct: invalid</text><rect x=\"20\" y=\"140\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"42\" y=\"168\" text-anchor=\"middle\" class=\"t-mono t-muted\">1</text><rect x=\"66\" y=\"140\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"88\" y=\"168\" text-anchor=\"middle\" class=\"t-mono t-muted\">2</text><rect x=\"112\" y=\"140\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"134\" y=\"168\" text-anchor=\"middle\" class=\"t-mono t-ok\">1</text><rect x=\"158\" y=\"140\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"180\" y=\"168\" text-anchor=\"middle\" class=\"t-mono t-ok\">3</text><rect x=\"204\" y=\"140\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"168\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"290\" y=\"162\" class=\"t-sm\">shrink: left moves 0 -&gt; 2</text><text x=\"290\" y=\"188\" class=\"t-sm t-ok\">{1, 3} = 2 distinct: valid</text><text x=\"20\" y=\"236\" class=\"t-sm t-muted\">now record: best = max(best, right - left + 1) = 2</text></svg>"
+    },
+    "m02-fixed-window": {
+      "caption": "A fixed window of size `k = 3` sliding one step: `a[4]` enters on the right while `a[1]` leaves on the left. The `i >= k` guard controls the subtraction; the `i >= k - 1` guard controls recording.",
+      "svg": "<svg viewBox=\"0 0 660 200\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Fixed-size window with one element entering and one leaving\"><text x=\"20\" y=\"24\" class=\"t-bold\">fixed k = 3: one enters, one leaves</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">5</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">4</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><rect x=\"250\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"272\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"296\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"318\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"272\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><text x=\"318\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><line x1=\"88\" y1=\"148\" x2=\"88\" y2=\"122\" class=\"s-bad\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-bad)\"/><text x=\"88\" y=\"168\" text-anchor=\"middle\" class=\"t-sm t-bad\">leaves</text><line x1=\"226\" y1=\"148\" x2=\"226\" y2=\"122\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><text x=\"226\" y=\"168\" text-anchor=\"middle\" class=\"t-sm t-ok\">enters</text><text x=\"370\" y=\"64\" class=\"t-mono t-sm\">sum += a[4];</text><text x=\"370\" y=\"90\" class=\"t-mono t-sm\">if (i &gt;= k) sum -= a[1];</text><text x=\"370\" y=\"122\" class=\"t-sm t-muted\">record once i &gt;= k - 1</text></svg>"
+    },
+    "m02-count-ending-right": {
+      "caption": "The counting idiom inside `atMost`: with a valid window from `left = 1` to `right = 4`, every start index from 1 through 4 gives a valid subarray ending at `right` — four of them — so the code adds `right - left + 1 = 4`.",
+      "svg": "<svg viewBox=\"0 0 660 290\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Counting all valid subarrays that end at the right pointer\"><text x=\"20\" y=\"24\" class=\"t-bold\">at most K: every start in [left, right] works</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">2</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"250\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line o-60\"/><text x=\"272\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-muted\">4</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"272\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><line x1=\"88\" y1=\"142\" x2=\"88\" y2=\"120\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"88\" y=\"162\" text-anchor=\"middle\" class=\"t-sm t-accent\">left</text><line x1=\"226\" y1=\"142\" x2=\"226\" y2=\"120\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"226\" y=\"162\" text-anchor=\"middle\" class=\"t-sm t-accent\">right</text><line x1=\"208\" y1=\"192\" x2=\"244\" y2=\"192\" class=\"s-accent\" stroke-width=\"3\"/><line x1=\"162\" y1=\"214\" x2=\"244\" y2=\"214\" class=\"s-accent\" stroke-width=\"3\"/><line x1=\"116\" y1=\"236\" x2=\"244\" y2=\"236\" class=\"s-accent\" stroke-width=\"3\"/><line x1=\"70\" y1=\"258\" x2=\"244\" y2=\"258\" class=\"s-accent\" stroke-width=\"3\"/><text x=\"290\" y=\"196\" class=\"t-sm\">subarrays ending at right:</text><text x=\"290\" y=\"224\" class=\"t-mono t-sm\">[4..4] [3..4] [2..4] [1..4]</text><text x=\"290\" y=\"254\" class=\"t-mono\">res += right - left + 1 = 4</text></svg>"
+    },
+    "m02-shorter-wall": {
+      "caption": "Container With Most Water: the trapped area (shaded) is capped by the **shorter** wall at `lo`. Moving the taller `hi` wall inward only shrinks the width while the cap stays — so the only move worth making is discarding `lo`.",
+      "svg": "<svg viewBox=\"0 0 660 280\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Water held between two walls, capped by the shorter one\"><text x=\"20\" y=\"24\" class=\"t-bold\">move the shorter wall</text><rect x=\"86\" y=\"150\" width=\"374\" height=\"60\" class=\"f-accent-soft o-60\"/><rect x=\"60\" y=\"150\" width=\"26\" height=\"60\" class=\"f-bad-soft s-bad\"/><rect x=\"160\" y=\"70\" width=\"26\" height=\"140\" class=\"f-panel s-line\"/><rect x=\"260\" y=\"170\" width=\"26\" height=\"40\" class=\"f-panel s-line\"/><rect x=\"360\" y=\"110\" width=\"26\" height=\"100\" class=\"f-panel s-line\"/><rect x=\"460\" y=\"90\" width=\"26\" height=\"120\" class=\"f-accent-soft s-accent\"/><line x1=\"40\" y1=\"210\" x2=\"620\" y2=\"210\" class=\"s-line\" stroke-width=\"2\"/><text x=\"73\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-bad\">lo (h=3)</text><text x=\"473\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-accent\">hi (h=6)</text><text x=\"20\" y=\"262\" class=\"t-sm\">area = min(3, 6) x width — only discarding lo can possibly do better</text></svg>"
+    }
+  }
+}

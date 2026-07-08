@@ -1,0 +1,262 @@
+{
+  "tag": "m01",
+  "week": "Week 1 · Module 01",
+  "title": "Arrays & Hashing",
+  "priority": "review",
+  "summary": "Hash maps, frequency counts, and prefix sums are the warm-up act of **every** OA you're targeting — Microsoft Codility, Flipkart GRiD, Trilogy. You already know these patterns; the goal of this module is to make them *reflexive*, so the easy problems cost you five minutes instead of twenty and you bank that time for the graph and DP monsters later in the test.",
+  "notes": [
+    {
+      "heading": "Why this module buys you time",
+      "body": "This is a **review** module for you — you've written hash-map code plenty of times. So the target here isn't understanding, it's *speed*: converting \"I could figure this out\" into \"I've already coded this pattern 30 times.\"\n\nHere is the recognition checklist. When a problem statement contains one of these signals, your hands should already be typing:\n\n- **\"Have I seen this value / does X exist?\"** in $O(1)$ → hash set or map.\n- **Counts, frequencies, duplicates, anagrams** → frequency map (or a fixed 26-slot array).\n- **Sums over subarrays / \"count subarrays satisfying X\"** → prefix sum, usually plus a hash map of prefixes seen so far.\n- **Brute force is an $O(n^2)$ double loop whose inner loop just *finds a matching partner*** → replace the inner loop with a hash lookup and drop to $O(n)$.\n- **\"$O(1)$ extra space\" or \"in place\"** → index-as-hash tricks: sign-marking, swap-to-home.\n\n> [!KEY]\n> Almost everything in this module is one trade, made over and over: **spend $O(n)$ memory on a hash structure to make each lookup $O(1)$**, and an $O(n^2)$ loop collapses to $O(n)$. When the problem *forbids* the memory, the array's own indices become the hash table.\n\n> [!EXAM] Where the minutes are\n> In a 90-minute Flipkart set with 3 hards, or a Codility screen with ~2 mediums, the array/hashing problem is the one you must finish on autopilot. Every minute saved here is a minute you spend on the problem that actually decides the test."
+    },
+    {
+      "heading": "Engine 1 — the \"have I seen it?\" map",
+      "body": "The first engine kills the most common $O(n^2)$ shape in existence: *for each element, scan everything else looking for a partner*.\n\nInstead, walk the array **once**. At each element, ask the map a question about elements you've *already passed*, then record the current element and move on. The inner scan becomes a single $O(1)$ lookup.\n\n> [!ANALOGY]\n> It's a coat check. Instead of running back through the whole party asking everyone \"are you my partner?\", every guest who has already arrived left a ticket at the desk. You walk in, ask the desk one question — *\"is ticket `target − mine` here?\"* — and either get an instant match or leave your own ticket and step aside.\n\nThe canonical form is Two Sum:\n\n```cpp\n// Canonical: Two Sum — return indices of the two numbers adding to target.\nvector<int> twoSum(vector<int>& nums, int target) {\n    unordered_map<int, int> seen;              // value -> index it lives at\n    for (int i = 0; i < (int)nums.size(); ++i) {\n        int need = target - nums[i];           // the partner I'm looking for\n        auto it = seen.find(need);\n        if (it != seen.end())                  // partner already passed by?\n            return {it->second, i};\n        seen[nums[i]] = i;                      // record AFTER checking (avoid self-pair)\n    }\n    return {};                                  // problem usually guarantees a solution\n}\n```\n\n[[fig:m01-two-sum-lookup]]\n\nNotice the shape: **query first, insert second**. When you're standing at index `i`, the map contains exactly the elements at indices `0..i-1` — so any match you find is automatically an *earlier* element, and an element can never match itself.\n\n> [!PITFALL] The #1 bug in this whole module\n> Inserting the current element *before* querying lets it pair with itself: with `nums = [3, 5]` and `target = 6`, insert-first happily returns `{0, 0}`. Burn the ordering rule into your fingers: **query for the partner, then insert yourself.**"
+    },
+    {
+      "heading": "Engine 2 — frequency counting",
+      "body": "Second engine: when the question is about **counts** — duplicates, anagrams, majority elements, \"top K frequent\" — count first, reason about the counts second.\n\nTwo containers do this job:\n\n- `unordered_map<Key, int>` — for arbitrary keys (integers with huge range, strings, pairs you encode).\n- A **fixed array** like `int cnt[26]` or `array<int,26>` — when the domain is small and known (lowercase letters, digits 0–9). This version is *much* faster: no hashing, no allocation, and `==` compares two signatures in one shot.\n\n```cpp\n// Anagram signature via a 26-slot frequency array.\narray<int,26> freq(const string& s) {\n    array<int,26> c{};                          // zero-initialized\n    for (char ch : s) c[ch - 'a']++;\n    return c;\n}\nbool isAnagram(const string& a, const string& b) {\n    return a.size() == b.size() && freq(a) == freq(b);\n}\n```\n\nThe same signature idea powers **Group Anagrams**: two strings are anagrams iff they have the same canonical key (their sorted form, or their count signature) — so use that key in a map and the groups build themselves.\n\n> [!EXAMPLE]\n> `isAnagram(\"listen\", \"silent\")`: both build the signature `{e:1, i:1, l:1, n:1, s:1, t:1}` spread over 26 slots → arrays compare equal → `true`. `isAnagram(\"rat\", \"car\")`: slot `r` and `a` match but `t` vs `c` differ → `false`. One pass each, $O(n)$ total.\n\n> [!EXAM] Under time pressure\n> If the domain is `a`–`z` or similarly tiny, reach for `array<int,26>` without thinking. It's faster to type, faster to run, and immune to hash-collision worst cases that occasionally bite `unordered_map` on adversarial Codility tests."
+    },
+    {
+      "heading": "Engine 3 — prefix sums + the map (Two Sum, one level up)",
+      "body": "Third engine, and the one that decides medium-difficulty OA problems: **prefix sums**.\n\nDefine `pre[i] = nums[0] + ... + nums[i-1]`, with `pre[0] = 0` (the empty prefix). Then any subarray sum falls out by subtraction:\n\n$$\\text{sum}(l..r) = pre[r+1] - pre[l]$$\n\n[[fig:m01-prefix-sum]]\n\nThat identity turns *\"count subarrays with sum $k$\"* into a complement-lookup problem — literally Two Sum in one higher dimension. A subarray ending at `r` with sum `k` exists for every earlier prefix equal to `pre[r+1] − k`. So: keep a running prefix and a map from *prefix value → how many times it has occurred*, and at each step count the matching earlier prefixes.\n\n```cpp\n// Count subarrays summing to k. O(n) time, O(n) space.\nint subarraySum(vector<int>& nums, int k) {\n    unordered_map<long long, int> cnt;          // prefix value -> how many times seen\n    cnt[0] = 1;                                  // empty prefix: needed for subarrays starting at index 0\n    long long pre = 0;\n    int ans = 0;\n    for (int x : nums) {\n        pre += x;\n        // a previous prefix p with (pre - p == k) closes a valid subarray\n        auto it = cnt.find(pre - k);\n        if (it != cnt.end()) ans += it->second;\n        cnt[pre]++;                              // record current prefix AFTER counting\n    }\n    return ans;\n}\n```\n\nThe same query-then-insert ordering rule from Engine 1 applies here, and there are two extra details that separate accepted from wrong-answer:\n\n> [!PITFALL] The two lines everyone gets wrong\n> **1. `cnt[0] = 1`.** Without the seed, any subarray that starts at index 0 — i.e. a full prefix that itself equals `k` — is never counted. **2. `long long` for the running sum.** Prefix sums overflow `int` fast; make it a habit before the OA punishes you for it.\n\n> [!WARNING] Sliding window is a trap here\n> If values can be **negative**, the grow/shrink sliding window silently gives wrong answers — shrinking the window no longer monotonically decreases the sum. \"Count subarrays with sum k, negatives allowed\" is a prefix-map problem, full stop."
+    },
+    {
+      "heading": "When they forbid extra space — the array becomes the hash table",
+      "body": "Some problems attach the kicker: *\"$O(1)$ extra space.\"* That bans the map — but if the values live in a bounded range like `[1, n]`, the array's **own indices** can play the role of hash slots. Two classic moves:\n\n**Sign-marking** (Find All Numbers Disappeared): to record \"value `v` exists\", flip `nums[v-1]` negative. The *sign* is your boolean, the *magnitude* still holds the original data. At the end, any index still holding a positive number corresponds to a missing value.\n\n**Swap-to-home** (First Missing Positive): value `v` *belongs* at index `v-1`. Cyclically swap each element toward its home slot; afterwards, the first index not holding its home value exposes the answer. Each swap parks at least one element permanently, so the total work is $O(n)$ even though there's a `while` inside the `for`.\n\n> [!WARNING] Sign tricks bite back\n> Once you start flipping signs, `nums[i]` may already be negated by the time you read it. **Always read `abs(nums[i])`** when extracting the value, and remember the trick collapses entirely if the input can legitimately contain non-positive numbers — check the constraints before committing.\n\n> [!NOTE]\n> Both moves get full worked treatments in the Deep Dives tab (Disappeared Numbers' sibling **First Missing Positive** is the boss fight). Skim them now, then come back after the ladder.\n\n> [!EXAM] Say the trade out loud\n> In an interview, name the tradeoff before choosing: \"hash set gives me $O(n)$ time and $O(n)$ space — do you want $O(1)$ space? Then I'll use the array itself as the hash table.\" Asking that question is itself worth points."
+    },
+    {
+      "heading": "Pitfalls, edge cases, and how to narrate",
+      "body": "The recurring bugs, collected — read this list again the night before each OA:\n\n| Bug | Fix |\n|---|---|\n| Insert before query in complement problems | **Query the partner, then insert self** — reversed, elements pair with themselves |\n| Missing `cnt[0] = 1` in prefix counting | Seed it — otherwise subarrays starting at index 0 vanish |\n| `int` overflow on running sums/products | `long long` for prefix sums, always |\n| `unordered_map` where `int cnt[26]` fits | Small bounded domain → fixed array, faster and cleaner |\n| `mp[key]` **inserts** a zero entry on read | Use `.count()` / `.find()` when checking must not mutate |\n| Re-reading a sign-flipped value | Read `abs(nums[i])`; verify inputs are positive first |\n\n**Edge cases to name unprompted** (interviewers score this): empty array, single element, all-equal elements, duplicates, negatives (which kill sliding-window-on-sum), and values outside the interesting range.\n\n> [!EXAM] The 4-step narration script\n> 1. State the brute force and its cost first: \"$O(n^2)$, pairwise check\" — establishes a baseline.\n> 2. Name the bottleneck: \"the inner loop is just a lookup.\"\n> 3. Kill it: \"a hash map makes that $O(1)$, so overall $O(n)$.\"\n> 4. Call the space/time trade explicitly and *ask* whether $O(1)$ space is required — if yes, pivot to the in-place tricks.\n\n> [!KEY]\n> Under Codility/GRiD pressure: fixed-size frequency array when the domain is small, `long long` prefix sums, and **don't over-engineer** — the plain hash-map version usually passes. Bank the saved minutes for graphs and DP."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Two Sum",
+      "url": "https://leetcode.com/problems/two-sum/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The archetype: complement lookup in a hash map — query first, insert after."
+    },
+    {
+      "name": "Contains Duplicate",
+      "url": "https://leetcode.com/problems/contains-duplicate/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Hash set membership — the pure \"have I seen it?\" reflex."
+    },
+    {
+      "name": "Valid Anagram",
+      "url": "https://leetcode.com/problems/valid-anagram/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Frequency array over 26 letters; compare the two signatures."
+    },
+    {
+      "name": "Majority Element",
+      "url": "https://leetcode.com/problems/majority-element/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Frequency counting first, then learn Boyer–Moore voting for the $O(1)$-space follow-up."
+    },
+    {
+      "name": "Group Anagrams",
+      "url": "https://leetcode.com/problems/group-anagrams/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Build a canonical key (sorted string or count signature) and let the map group for you."
+    },
+    {
+      "name": "Top K Frequent Elements",
+      "url": "https://leetcode.com/problems/top-k-frequent-elements/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Frequency map + bucket sort by count for $O(n)$ (a heap also works)."
+    },
+    {
+      "name": "Intersection of Two Arrays",
+      "url": "https://leetcode.com/problems/intersection-of-two-arrays/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Set intersection — dump one array into a set, filter the other."
+    },
+    {
+      "name": "Product of Array Except Self",
+      "url": "https://leetcode.com/problems/product-of-array-except-self/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Prefix × suffix products in two passes — no division allowed (see Deep Dives)."
+    },
+    {
+      "name": "Subarray Sum Equals K",
+      "url": "https://leetcode.com/problems/subarray-sum-equals-k/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Prefix sum + map of prefix counts; seed `cnt[0]=1` and query before inserting."
+    },
+    {
+      "name": "Longest Consecutive Sequence",
+      "url": "https://leetcode.com/problems/longest-consecutive-sequence/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Hash set + \"only walk from run starts\" trick for true $O(n)$ (see Deep Dives)."
+    },
+    {
+      "name": "Find All Numbers Disappeared in an Array",
+      "url": "https://leetcode.com/problems/find-all-numbers-disappeared-in-an-array/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Index-as-hash: sign-mark `nums[v-1]` in place; read values with `abs()`."
+    },
+    {
+      "name": "Set Matrix Zeroes",
+      "url": "https://leetcode.com/problems/set-matrix-zeroes/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Use the first row/column as your $O(1)$ marker storage — handle them last."
+    },
+    {
+      "name": "Valid Sudoku",
+      "url": "https://leetcode.com/problems/valid-sudoku/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Hash sets per row / column / 3×3 box; the skill is encoding the key cleanly."
+    },
+    {
+      "name": "First Missing Positive",
+      "url": "https://leetcode.com/problems/first-missing-positive/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Cyclic in-place placement — the array *is* the hash table (see Deep Dives)."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Product of Array Except Self** — build `out` where `out[i]` is the product of every element except `nums[i]`. Division is forbidden, the array may contain zeros, and you should aim for $O(1)$ extra space beyond the output.",
+      "url": "https://leetcode.com/problems/product-of-array-except-self/",
+      "tag": "two-pass",
+      "answer": "**Why naive fails.** The obvious move is `total_product / nums[i]` — but division is banned, and it explodes anyway the moment a zero appears in the array. Recomputing each product with its own loop is $O(n^2)$.\n\n> [!INTUITION]\n> `out[i]` splits perfectly at position `i`: it is *(product of everything strictly left of `i`)* × *(product of everything strictly right of `i`)*. Each half is a running product you can accumulate in a single directional sweep — one pass left-to-right, one pass right-to-left.\n\n[[fig:m01-left-right]]\n\n**The algorithm, step by step:**\n\n1. **Left pass:** write into `out[i]` the product of all elements strictly left of `i`. Start an accumulator `pre = 1`; at each `i`, store `pre` *first*, then multiply `nums[i]` in. (So `out[0] = 1` — nothing is left of index 0.)\n2. **Right pass:** sweep backwards with a second accumulator `suf = 1`, multiplying `out[i] *= suf` before folding `nums[i]` into `suf`.\n\n```cpp\nvector<int> productExceptSelf(vector<int>& nums) {\n    int n = nums.size();\n    vector<int> out(n, 1);\n    int pre = 1;\n    for (int i = 0; i < n; ++i) { out[i] = pre; pre *= nums[i]; } // left products\n    int suf = 1;\n    for (int i = n - 1; i >= 0; --i) { out[i] *= suf; suf *= nums[i]; } // × right products\n    return out;\n}\n```\n\n**Complexity:** $O(n)$ time, $O(1)$ extra space — the output array doesn't count against you. Zeros handle themselves with no special-casing: a zero at position `j` simply makes every left-product past `j` and every right-product before `j` zero, which is exactly correct.\n\n**What generalizes:** the *store-before-fold* two-pass shape — \"answer at `i` = f(everything left) ⊕ f(everything right)\" — reappears constantly: prefix/suffix maxima in trapping-rain-water-style problems, prefix XORs, and DP problems that split around an index. When you see \"except self\" or \"on both sides of i\", think two sweeps."
+    },
+    {
+      "q": "**Subarray Sum Equals K** — count the number of *contiguous* subarrays whose elements sum to exactly `k`. Values may be negative, so the count can't be found with a window.",
+      "url": "https://leetcode.com/problems/subarray-sum-equals-k/",
+      "tag": "prefix-map",
+      "answer": "**Why naive fails.** Enumerating all $O(n^2)$ subarrays is too slow. And here's the trap that catches most people: because values can be **negative**, the grow/shrink sliding window is *wrong*, not just slow — shrinking the window no longer monotonically decreases the sum, so the window logic silently produces wrong answers.\n\n> [!KEY]\n> `sum(l..r) = pre[r+1] − pre[l]`. So a subarray **ending** at `r` with sum `k` exists for every earlier prefix with `pre[l] = pre[r+1] − k`. That is a complement lookup — *exactly Two Sum*, except you count how many earlier prefixes match instead of returning one index.\n\n[[fig:m01-prefix-sum]]\n\n**The algorithm:** maintain a running prefix sum `pre` and a map `cnt : prefix value → occurrences so far`. At each element: add `cnt[pre − k]` to the answer (every matching earlier prefix closes one valid subarray ending here), *then* record the current `pre`. Seed `cnt[0] = 1` so a subarray starting at index 0 — one whose entire prefix equals `k` — gets counted.\n\n```cpp\nint subarraySum(vector<int>& nums, int k) {\n    unordered_map<long long, int> cnt;\n    cnt[0] = 1;                 // the empty prefix\n    long long pre = 0;\n    int ans = 0;\n    for (int x : nums) {\n        pre += x;\n        auto it = cnt.find(pre - k);   // every earlier prefix equal to (pre-k)\n        if (it != cnt.end()) ans += it->second; // ...closes a valid subarray\n        cnt[pre]++;                    // record AFTER counting\n    }\n    return ans;\n}\n```\n\n**Complexity:** $O(n)$ time, $O(n)$ space. The two spots people get wrong: the seed `cnt[0] = 1`, and the query-before-insert order.\n\n**What generalizes:** \"count subarrays where *(cumulative quantity)* hits a target\" almost always reduces to *prefix + complement map* — subarray sums divisible by `k` (store `pre mod k`), equal 0s and 1s (map 0→−1, look for equal prefixes), XOR targets (prefix XOR). Learn the reduction once, reuse it for years."
+    },
+    {
+      "q": "**Longest Consecutive Sequence** — given an unsorted array, return the length of the longest run of consecutive integers (e.g. `[100,4,200,1,3,2]` contains `1,2,3,4` → answer 4). Required: $O(n)$, so sorting is off the table.",
+      "url": "https://leetcode.com/problems/longest-consecutive-sequence/",
+      "tag": "set-runs",
+      "answer": "**Why naive fails.** Sorting gives an easy answer but costs $O(n \\log n)$ — explicitly not the target. Expanding outward from every element while re-scanning the array is $O(n^2)$.\n\n> [!INTUITION]\n> Dump everything into a hash set. Now here's the whole trick: a number `x` can only be the **start** of a run if `x − 1` is *not* in the set. Walk upward (`x, x+1, x+2, …`) **only from starts**. Every run is then walked exactly once, from its unique starting point — so the total inner-loop work across the entire outer loop is at most $n$ steps.\n\n[[fig:m01-run-start]]\n\n```cpp\nint longestConsecutive(vector<int>& nums) {\n    unordered_set<int> s(nums.begin(), nums.end());\n    int best = 0;\n    for (int x : s) {\n        if (s.count(x - 1)) continue;           // not a sequence start — skip\n        int len = 1, cur = x;\n        while (s.count(cur + 1)) { ++cur; ++len; }  // walk the run once\n        best = max(best, len);\n    }\n    return best;\n}\n```\n\n**Trace** on `[100,4,200,1,3,2]`: the set is `{1,2,3,4,100,200}`. `4` has `3` in the set → skip. `1` has no `0` → walk `1→2→3→4`, length 4. `100` has no `99` → run of 1. `200` likewise. Answer **4**.\n\n**Complexity:** $O(n)$ time, $O(n)$ space. The guard `if (s.count(x - 1)) continue;` **is** the algorithm — delete it and every element of a length-$m$ run launches its own walk, collapsing you back to $O(n^2)$.\n\n> [!PITFALL]\n> Iterate over the *set*, not the original array — duplicated values in `nums` would otherwise repeat identical walks. And when asked \"but there's a while inside a for — isn't that $O(n^2)$?\", the answer is amortization: each set element is stepped onto by *some* walk at most once in total.\n\n**What generalizes:** the *\"only start work from canonical starting points\"* idea — you'll meet it again when you only launch DFS floods from unvisited cells, and in interval problems where only left endpoints begin a merge."
+    },
+    {
+      "q": "**First Missing Positive** — find the smallest positive integer missing from an unsorted array in $O(n)$ time and $O(1)$ extra space. Example: `[3,4,-1,1]` → `2`.",
+      "url": "https://leetcode.com/problems/first-missing-positive/",
+      "tag": "index-as-hash",
+      "answer": "**Why naive fails.** A hash set answers it in $O(n)$ time but $O(n)$ space — the hard version forbids that. Sorting costs $O(n \\log n)$.\n\n> [!KEY]\n> For an array of length `n`, the answer **must** lie in `[1, n+1]` (if all of `1..n` are present, it's `n+1`; otherwise one of them is missing). Everything outside `[1, n]` is noise. So use the array *itself* as the hash table: value `v`'s \"home\" is index `v − 1`. Put everyone home, then the first index `i` where `nums[i] != i + 1` reveals the answer `i + 1`.\n\n**The trick — cyclic swapping.** At each position `i`, *while* the current value `v = nums[i]` is in range `[1, n]` and not already sitting in its home slot (`nums[v-1] != v`), swap it home. It must be a `while`, not an `if`: the swap drops a brand-new value into position `i`, and that value may itself need to travel. The guard `nums[v-1] != v` is what stops duplicates from swapping back and forth forever.\n\n[[fig:m01-home-swap]]\n\n```cpp\nint firstMissingPositive(vector<int>& nums) {\n    int n = nums.size();\n    for (int i = 0; i < n; ++i) {\n        while (nums[i] > 0 && nums[i] <= n && nums[nums[i]-1] != nums[i])\n            swap(nums[i], nums[nums[i]-1]);      // send nums[i] to its home index\n    }\n    for (int i = 0; i < n; ++i)\n        if (nums[i] != i + 1) return i + 1;      // first slot not holding its home value\n    return n + 1;                                // 1..n all present\n}\n```\n\n**Trace** on `[3,4,-1,1]`: `i=0`: 3 → home index 2, swap → `[-1,4,3,1]`; −1 is out of range, stop. `i=1`: 4 → index 3 → `[-1,1,3,4]`; now 1 → index 0 → `[1,-1,3,4]`; −1 stops. `i=2,3`: already home. Scan: index 1 holds −1 ≠ 2 → answer **2**.\n\n**Complexity:** $O(n)$ time — every swap parks at least one element permanently in its home, so total swaps ≤ n — and $O(1)$ extra space.\n\n> [!PITFALL]\n> Writing the duplicate guard as `nums[i] != i + 1` instead of `nums[nums[i]-1] != nums[i]` reintroduces the infinite loop on inputs like `[1,1]`: the two equal values would swap with each other forever. Compare the value against *its home slot's occupant*, not against the current position.\n\n**What generalizes:** whenever values are bounded by the array length (`[1, n]` or `[0, n−1]`) and space is forbidden, think *index-as-hash*: swap-to-home (this problem), or sign-marking (Find All Numbers Disappeared)."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: *\"count the contiguous subarrays whose sum equals `k`; elements may be negative.\"* Which approach is correct?",
+      "options": [
+        "Sliding window: grow the right end, shrink the left while the sum exceeds k",
+        "Running prefix sum + hash map counting occurrences of each prefix value",
+        "Sort the array, then use two pointers from both ends",
+        "Boyer–Moore majority voting over subarray sums"
+      ],
+      "answer": 1,
+      "explanation": "With negatives, shrinking a window doesn't monotonically decrease its sum, so the sliding-window invariant breaks and it silently returns wrong counts — it's not just slow, it's incorrect. Sorting destroys contiguity, and Boyer–Moore solves a completely different (majority) problem. The prefix-map reduction `pre[l] = pre[r+1] − k` works for any signs in $O(n)$.",
+      "tag": "pattern"
+    },
+    {
+      "q": "In the one-pass Two Sum template, you move the line `seen[nums[i]] = i;` to *before* the map query. What goes wrong?",
+      "options": [
+        "An element can now match itself — e.g. `nums = [3, 5]`, `target = 6` returns `{0, 0}`",
+        "Complexity degrades from O(n) to O(n²)",
+        "The function can no longer find pairs where both numbers are equal, like `[3, 3]` with target 6",
+        "Nothing — the order of the two lines is interchangeable"
+      ],
+      "answer": 0,
+      "explanation": "Insert-first means the map already contains index `i` when you query for `target − nums[i]`, so if `nums[i]` is exactly half the target it \"finds\" itself. Complexity is unaffected (B), and the correct query-then-insert order actually *handles* the `[3, 3]` case fine (C) — the second 3 finds the first one, which was inserted on the previous iteration.",
+      "tag": "template-bug"
+    },
+    {
+      "q": "In the `subarraySum` template, what does the seed `cnt[0] = 1` accomplish?",
+      "options": [
+        "It prevents a crash when `cnt.find(pre - k)` misses",
+        "It makes the algorithm work when the array contains negative numbers",
+        "It counts subarrays that start at index 0 — those whose full prefix equals k",
+        "It avoids double-counting when the same prefix value occurs twice"
+      ],
+      "answer": 2,
+      "explanation": "When a prefix `pre` itself equals `k`, the matching earlier prefix is `pre − k = 0` — the *empty* prefix before index 0. Seeding `cnt[0] = 1` represents that empty prefix so those subarrays are counted. A failed `find` never crashes (A), negatives are handled by the prefix identity itself (B), and repeated prefix values *should* each count (D) — that's why the map stores counts, not booleans.",
+      "tag": "seed"
+    },
+    {
+      "q": "`longestConsecutive` has a `while (s.count(cur+1))` loop nested inside a `for` loop over the set — yet it runs in $O(n)$. Why?",
+      "options": [
+        "Hash set lookups get faster as the set shrinks during iteration",
+        "The while loop can execute at most log n times per element",
+        "The set stores elements in sorted order, so runs are contiguous in memory",
+        "Walks begin only at run starts (x−1 absent), so each element is stepped onto at most once across all walks combined"
+      ],
+      "answer": 3,
+      "explanation": "The guard `if (s.count(x-1)) continue;` ensures each consecutive run is walked exactly once, from its unique smallest element — so the *total* inner-loop work over the whole execution is at most n steps. That's amortized analysis, not a per-iteration bound (B). Unordered sets aren't sorted (C) and don't speed up as you iterate (A). Remove the guard and it's O(n²).",
+      "tag": "complexity"
+    },
+    {
+      "q": "Trace `subarraySum(nums = [1, 2, 3], k = 3)`. After the loop finishes, what is `ans`?",
+      "options": ["1", "2", "3", "0"],
+      "answer": 1,
+      "explanation": "Prefixes run 0, 1, 3, 6 (with `cnt[0]=1` seeded). At `pre=1`: look up `1−3=−2`, absent. At `pre=3`: look up `0`, count 1 → ans=1 (subarray `[1,2]`). At `pre=6`: look up `3`, count 1 → ans=2 (subarray `[3]`). Two subarrays sum to 3. If you got 1, you probably forgot the `cnt[0]=1` seed — exactly the bug the template guards against.",
+      "tag": "trace"
+    },
+    {
+      "q": "You need to check whether key `k` exists in an `unordered_map<int,int> mp` **without modifying the map**. Which check is safe?",
+      "options": [
+        "`if (mp[k] != 0)`",
+        "`if (mp[k])`",
+        "`if (mp.count(k))`",
+        "Any of these — reads never modify a map"
+      ],
+      "answer": 2,
+      "explanation": "`operator[]` default-constructs a missing key, silently inserting a `{k, 0}` entry — so options A and B both *mutate* the map on a miss (and also can't distinguish \"absent\" from \"present with value 0\"). Use `.count(k)` or `.find(k)` for pure queries. This matters in prefix-count code, where a phantom zero entry can corrupt later counts.",
+      "tag": "stl"
+    },
+    {
+      "q": "In `firstMissingPositive`, the swap loop condition includes `nums[nums[i]-1] != nums[i]`. If you drop that clause (keeping the range checks), what happens on input `[1, 1]`?",
+      "options": [
+        "Infinite loop — the two equal values swap with each other forever",
+        "Wrong answer: it returns 1 instead of 2",
+        "Undefined behavior from indexing out of bounds",
+        "Nothing — the range checks alone are sufficient"
+      ],
+      "answer": 0,
+      "explanation": "At `i=1`, `nums[1]=1` is in range, so it swaps with `nums[0]` — which also holds 1. The array is unchanged, the condition is still true, and the loop spins forever. The guard says \"only swap if the home slot doesn't already hold this value,\" which is what terminates duplicates. The range checks (B, C's concern) only keep indices legal; they can't detect futile swaps.",
+      "tag": "guard"
+    }
+  ],
+  "figures": {
+    "m01-two-sum-lookup": {
+      "caption": "Two Sum at `i = 1` on `[2, 7, 11, 15]`, target 9. The map holds only *earlier* elements (green). We query for `need = 2`, find it at index 0, and return — the current element is inserted only if no partner exists yet.",
+      "svg": "<svg viewBox=\"0 0 660 210\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Two Sum hash map lookup at index 1\"><text x=\"20\" y=\"24\" class=\"t-bold\">Two Sum, i = 1: query first, insert after</text><rect x=\"20\" y=\"50\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"42\" y=\"78\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"66\" y=\"50\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"88\" y=\"78\" text-anchor=\"middle\" class=\"t-mono t-accent\">7</text><rect x=\"112\" y=\"50\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"78\" text-anchor=\"middle\" class=\"t-mono\">11</text><rect x=\"158\" y=\"50\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"78\" text-anchor=\"middle\" class=\"t-mono\">15</text><text x=\"42\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"112\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><line x1=\"88\" y1=\"128\" x2=\"88\" y2=\"150\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"88\" y=\"172\" text-anchor=\"middle\" class=\"t-sm t-accent\">i — need 9 − 7 = 2</text><line x1=\"210\" y1=\"72\" x2=\"344\" y2=\"80\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"277\" y=\"56\" text-anchor=\"middle\" class=\"t-sm t-accent2\">look up need = 2</text><rect x=\"350\" y=\"50\" width=\"280\" height=\"88\" rx=\"8\" class=\"f-panel2 s-line\"/><text x=\"370\" y=\"78\" class=\"t-sm t-muted\">seen : value → index</text><text x=\"370\" y=\"112\" class=\"t-mono\">2 → 0</text><text x=\"440\" y=\"112\" class=\"t-sm t-ok\">← partner found!</text><text x=\"20\" y=\"200\" class=\"t-sm t-muted\">return {0, 1} — the current 7 never needs to be inserted</text></svg>"
+    },
+    "m01-prefix-sum": {
+      "caption": "The prefix-sum identity on `nums = [1,2,3,4,5]`: the shaded subarray `nums[1..3]` equals `pre[4] − pre[1] = 10 − 1 = 9`. Note `pre` has one extra slot — `pre[0] = 0` is the empty prefix.",
+      "svg": "<svg viewBox=\"0 0 660 270\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Prefix sum array and the subtraction identity\"><text x=\"20\" y=\"24\" class=\"t-bold\">sum(l..r) = pre[r+1] − pre[l]</text><text x=\"20\" y=\"80\" class=\"t-sm t-muted\">nums</text><rect x=\"90\" y=\"52\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"112\" y=\"80\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"136\" y=\"52\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"158\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><rect x=\"182\" y=\"52\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"204\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-accent\">3</text><rect x=\"228\" y=\"52\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"250\" y=\"80\" text-anchor=\"middle\" class=\"t-mono t-accent\">4</text><rect x=\"274\" y=\"52\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"296\" y=\"80\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"420\" y=\"80\" class=\"t-sm t-muted\">shaded = nums[1..3], sum 9</text><text x=\"112\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"158\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"204\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"250\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"296\" y=\"114\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"20\" y=\"176\" class=\"t-sm t-muted\">pre</text><rect x=\"90\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"112\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">0</text><rect x=\"136\" y=\"148\" width=\"44\" height=\"44\" class=\"f-warn-soft s-line\"/><text x=\"158\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"182\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"204\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"228\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"250\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"274\" y=\"148\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"296\" y=\"176\" text-anchor=\"middle\" class=\"t-mono t-ok\">10</text><rect x=\"320\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"342\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">15</text><text x=\"420\" y=\"176\" class=\"t-sm t-muted\">pre[l] and pre[r+1] highlighted</text><text x=\"112\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"158\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"204\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"250\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"296\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"342\" y=\"210\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><text x=\"20\" y=\"248\" class=\"t-mono\">sum(1..3) = pre[4] − pre[1] = 10 − 1 = 9</text></svg>"
+    },
+    "m01-left-right": {
+      "caption": "Product Except Self on `[1,2,3,4]`: pass 1 fills each slot with the product of everything to its **left**, pass 2 multiplies in the product of everything to its **right**. `out[2] = 2 × 4 = 8` — no division needed.",
+      "svg": "<svg viewBox=\"0 0 660 310\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Left and right product passes building the output array\"><text x=\"20\" y=\"24\" class=\"t-bold\">out[i] = (product left of i) × (product right of i)</text><text x=\"20\" y=\"72\" class=\"t-sm t-muted\">nums</text><rect x=\"150\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"172\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"196\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"218\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"242\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"264\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"288\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"310\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">4</text><text x=\"20\" y=\"138\" class=\"t-sm t-muted\">left</text><rect x=\"150\" y=\"110\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"172\" y=\"138\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"196\" y=\"110\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"218\" y=\"138\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><rect x=\"242\" y=\"110\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"264\" y=\"138\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><rect x=\"288\" y=\"110\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"310\" y=\"138\" text-anchor=\"middle\" class=\"t-mono t-accent\">6</text><line x1=\"360\" y1=\"132\" x2=\"430\" y2=\"132\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"444\" y=\"137\" class=\"t-sm t-muted\">pass 1, left to right</text><text x=\"20\" y=\"204\" class=\"t-sm t-muted\">right</text><rect x=\"150\" y=\"176\" width=\"44\" height=\"44\" class=\"f-panel2 s-accent2\"/><text x=\"172\" y=\"204\" text-anchor=\"middle\" class=\"t-mono t-accent2\">24</text><rect x=\"196\" y=\"176\" width=\"44\" height=\"44\" class=\"f-panel2 s-accent2\"/><text x=\"218\" y=\"204\" text-anchor=\"middle\" class=\"t-mono t-accent2\">12</text><rect x=\"242\" y=\"176\" width=\"44\" height=\"44\" class=\"f-panel2 s-accent2\"/><text x=\"264\" y=\"204\" text-anchor=\"middle\" class=\"t-mono t-accent2\">4</text><rect x=\"288\" y=\"176\" width=\"44\" height=\"44\" class=\"f-panel2 s-accent2\"/><text x=\"310\" y=\"204\" text-anchor=\"middle\" class=\"t-mono t-accent2\">1</text><line x1=\"430\" y1=\"198\" x2=\"360\" y2=\"198\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"444\" y=\"203\" class=\"t-sm t-muted\">pass 2, right to left</text><text x=\"20\" y=\"270\" class=\"t-sm t-muted\">out</text><rect x=\"150\" y=\"242\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"172\" y=\"270\" text-anchor=\"middle\" class=\"t-mono t-ok\">24</text><rect x=\"196\" y=\"242\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"218\" y=\"270\" text-anchor=\"middle\" class=\"t-mono t-ok\">12</text><rect x=\"242\" y=\"242\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"264\" y=\"270\" text-anchor=\"middle\" class=\"t-mono t-ok\">8</text><rect x=\"288\" y=\"242\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"310\" y=\"270\" text-anchor=\"middle\" class=\"t-mono t-ok\">6</text><text x=\"360\" y=\"270\" class=\"t-sm t-muted\">= left × right, e.g. out[2] = 2 × 4 = 8</text></svg>"
+    },
+    "m01-run-start": {
+      "caption": "Longest Consecutive on the set `{1,2,3,4,100,200}`. Only `1`, `100`, `200` are run starts (their predecessor is absent); the walk `1→2→3→4` covers each member of the run exactly once, so total work stays $O(n)$.",
+      "svg": "<svg viewBox=\"0 0 660 200\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Walking a consecutive run only from its start\"><text x=\"20\" y=\"24\" class=\"t-bold\">x is a run start iff x − 1 ∉ set</text><rect x=\"20\" y=\"56\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"42\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-ok\">1</text><line x1=\"68\" y1=\"78\" x2=\"108\" y2=\"78\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><rect x=\"112\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">2</text><line x1=\"160\" y1=\"78\" x2=\"200\" y2=\"78\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><rect x=\"204\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">3</text><line x1=\"252\" y1=\"78\" x2=\"292\" y2=\"78\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><rect x=\"296\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"318\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">4</text><text x=\"42\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-ok\">start: 0 ∉ set</text><text x=\"226\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">walk the run once → length 4</text><rect x=\"460\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-muted\"/><text x=\"482\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-muted\">100</text><rect x=\"552\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-muted\"/><text x=\"574\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-muted\">200</text><text x=\"528\" y=\"126\" text-anchor=\"middle\" class=\"t-sm t-muted\">also starts — runs of length 1</text><text x=\"20\" y=\"170\" class=\"t-sm t-muted\">each element is stepped onto by a walk at most once → O(n) total</text><text x=\"520\" y=\"170\" class=\"t-bold t-ok\">best = 4</text></svg>"
+    },
+    "m01-home-swap": {
+      "caption": "First Missing Positive on `[3,4,−1,1]`: cyclic swaps send each in-range value `v` to its home index `v−1`. After placement, index 1 is the first slot not holding `i+1` — so the answer is **2**.",
+      "svg": "<svg viewBox=\"0 0 660 270\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Cyclic swap-to-home placement for First Missing Positive\"><text x=\"20\" y=\"24\" class=\"t-bold\">send value v home to index v − 1, then scan</text><text x=\"20\" y=\"90\" class=\"t-sm t-muted\">before</text><rect x=\"110\" y=\"62\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"132\" y=\"90\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"156\" y=\"62\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"178\" y=\"90\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"202\" y=\"62\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"224\" y=\"90\" text-anchor=\"middle\" class=\"t-mono\">−1</text><rect x=\"248\" y=\"62\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"270\" y=\"90\" text-anchor=\"middle\" class=\"t-mono\">1</text><line x1=\"201\" y1=\"114\" x2=\"201\" y2=\"144\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><text x=\"220\" y=\"134\" class=\"t-sm t-muted\">cyclic swaps (each swap parks one value)</text><text x=\"20\" y=\"178\" class=\"t-sm t-muted\">after</text><rect x=\"110\" y=\"150\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"132\" y=\"178\" text-anchor=\"middle\" class=\"t-mono t-ok\">1</text><rect x=\"156\" y=\"150\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"178\" y=\"178\" text-anchor=\"middle\" class=\"t-mono t-bad\">−1</text><rect x=\"202\" y=\"150\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"224\" y=\"178\" text-anchor=\"middle\" class=\"t-mono t-ok\">3</text><rect x=\"248\" y=\"150\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"270\" y=\"178\" text-anchor=\"middle\" class=\"t-mono t-ok\">4</text><text x=\"132\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"178\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"224\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"270\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"20\" y=\"250\" class=\"t-sm\">first index where nums[i] ≠ i + 1:</text><text x=\"280\" y=\"250\" class=\"t-bold t-bad\">i = 1 → answer 2</text></svg>"
+    }
+  }
+}

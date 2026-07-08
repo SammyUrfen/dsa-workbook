@@ -1,0 +1,274 @@
+{
+  "tag": "m10",
+  "week": "Week 5 · Module 10",
+  "title": "Graphs I: Traversal & Union-Find",
+  "priority": "attack",
+  "summary": "This is the single most-tested OA topic for you: Microsoft loves graphs+DP, Flipkart loves DFS. You have never done graphs before, but the good news is that ~90% of graph problems reduce to five templates — BFS, DFS, the grid idiom, topological sort, and Union-Find. Get those into muscle memory and a whole class of \"hard\" problems becomes mechanical.",
+  "notes": [
+    {
+      "heading": "Recognizing a graph problem (the word \"graph\" never appears)",
+      "body": "Here is the dirty secret of graph questions in OAs: they almost never say \"graph\". They hand you a grid, a list of `edges`, `prerequisites`, or `connections`, or say \"n servers and the cables between them\" — and expect *you* to say \"this is a graph\". Naming the model is half the battle, and interviewers explicitly grade it.\n\nTrain yourself on these triggers:\n\n| You see… | You think… |\n|---|---|\n| a 2-D grid of cells | implicit graph, neighbors = 4 adjacent cells |\n| \"can you get from A to B?\", \"connected\", \"groups\", \"islands\" | reachability / connected components → **DFS** (or DSU) |\n| \"minimum moves\", \"fewest steps\", \"nearest\", on **unweighted** edges | shortest path → **BFS** (level = distance) |\n| \"finish B before A\", \"build order\", dependencies | **topological sort** (and cycle detection for free) |\n| edges arriving one by one + \"are these two in the same group yet?\" | **Union-Find (DSU)** |\n\n> [!KEY]\n> BFS vs DFS is not a style choice. If the question asks for a **shortest number of steps** on an unweighted graph, it MUST be BFS — DFS finds *a* path, not the shortest one. If you only need reachability or components, either works; DFS is usually less code.\n\n> [!EXAM]\n> In a timed OA, the phrase \"minimum number of operations/steps/minutes\" on any state you can transform is a flashing BFS sign — even when there is no visible grid. Word Ladder is exactly this: words are nodes, one-letter changes are edges."
+    },
+    {
+      "heading": "The two engines: adjacency list + DFS/BFS",
+      "body": "A graph is just nodes + edges. Ninety percent of the work is always the same two steps: (1) build the adjacency list, (2) run BFS or DFS with a `visited` mark so you never process a node twice. Everything else in this module is a variation on that.\n\n**Adjacency list** — your default representation. For nodes numbered `0..n-1`:\n\n```cpp\nint n;                              // number of nodes\nvector<vector<int>> adj(n);        // adj[u] = list of neighbors of u\nfor (auto& e : edges) {            // e = {u, v}\n    adj[e[0]].push_back(e[1]);\n    adj[e[1]].push_back(e[0]);     // OMIT this line if the graph is DIRECTED\n}\n```\n\n**DFS (recursive)** — dive as deep as possible before backing up. You already have this reflex from trees and backtracking; the only new ingredient is `visited`, because graphs, unlike trees, have cycles.\n\n```cpp\nvector<int> visited(n, 0);\nfunction<void(int)> dfs = [&](int u) {\n    visited[u] = 1;\n    for (int v : adj[u])\n        if (!visited[v]) dfs(v);\n};\nfor (int i = 0; i < n; i++)         // handles disconnected graphs\n    if (!visited[i]) dfs(i);        // each fresh start = one component\n```\n\nThat outer loop is not decoration: each time it finds an unvisited node and launches a fresh DFS, you have discovered **one new connected component**. Counting components is literally counting those launches.\n\n**BFS** — explore in expanding rings. Everything at distance 1 first, then distance 2, and so on. This is why BFS gives shortest paths on unweighted graphs: the first time you reach a node, you got there by a minimum-length route.\n\n[[fig:m10-bfs-levels]]\n\n```cpp\nvector<int> dist(n, -1);            // -1 = unvisited; also serves as distance\nqueue<int> q;\nq.push(src); dist[src] = 0;\nwhile (!q.empty()) {\n    int u = q.front(); q.pop();\n    for (int v : adj[u]) {\n        if (dist[v] == -1) {        // first time we reach v = shortest dist\n            dist[v] = dist[u] + 1;\n            q.push(v);\n        }\n    }\n}\n```\n\n> [!INTUITION] Why \"first reach = shortest\"\n> The queue always holds nodes in non-decreasing distance order. So when `v` is discovered from `u`, no shorter route to `v` can appear later — anything discovered later sits at the same or a greater level. Setting `dist[v]` once, at first contact, is safe.\n\n> [!PITFALL] Mark visited at PUSH time, not pop time\n> The template sets `dist[v]` (the visited mark) the moment `v` is pushed. If you instead mark on pop, the same node can be enqueued many times through different neighbors before it is ever popped — the queue explodes and you TLE. This is the number-one BFS bug."
+    },
+    {
+      "heading": "Grids are graphs in disguise",
+      "body": "Most OA graph problems don't even give you edges — they give you a grid. Every cell is a node; its edges go to the 4 (sometimes 8) adjacent cells. You never build an adjacency list; you *compute* neighbors on the fly with the direction-array idiom. Memorize it — you will type it dozens of times:\n\n```cpp\nint R = grid.size(), C = grid[0].size();\nint dr[] = {-1, 1, 0, 0}, dc[] = {0, 0, -1, 1};   // up, down, left, right\n// inside your loop, for cell (r, c):\nfor (int k = 0; k < 4; k++) {\n    int nr = r + dr[k], nc = c + dc[k];\n    if (nr < 0 || nr >= R || nc < 0 || nc >= C) continue;  // bounds first!\n    // ... process (nr, nc)\n}\n```\n\n[[fig:m10-grid-dirs]]\n\n> [!PITFALL] Bounds before indexing\n> The range check on `nr, nc` must come **before** you ever touch `grid[nr][nc]`. Reverse those two and you have an out-of-bounds read — a crash on the judge that is miserable to debug under time pressure.\n\n**Multi-source BFS** — the one genuinely new idea in this section. When many starting points spread *simultaneously* (every rotten orange rots its neighbors, every gate measures distance), do NOT run one BFS per source. Push **all** sources into the queue at level 0, then run one ordinary BFS:\n\n```cpp\nqueue<pair<int,int>> q;\nfor (all source cells) { q.push({r,c}); dist[r][c] = 0; }\n// then the normal BFS loop — this computes nearest-source distance for every cell\n```\n\nThe level at which a cell is first reached equals its distance to the **nearest** source — all the waves race outward in parallel and whichever arrives first wins.\n\n[[fig:m10-multi-source]]\n\n> [!ANALOGY]\n> Drop several pebbles into a pond at the same instant. Ripples expand together, and each point of the pond is first disturbed by the ripple from its *closest* pebble. Multi-source BFS is exactly that — one queue, several pebbles.\n\n> [!EXAM]\n> \"Distance to the nearest X for every cell\" (01 Matrix, Walls and Gates) is always multi-source BFS *from the X cells*, never per-cell searches. The per-cell version is $O((RC)^2)$ and will TLE by design."
+    },
+    {
+      "heading": "Topological sort: ordering under dependencies",
+      "body": "Whenever tasks have \"must come before\" constraints — courses with prerequisites, build steps, recipe stages — draw a directed edge `b → a` meaning \"b unlocks a\". A valid ordering of all tasks exists **iff the directed graph has no cycle**; the ordering itself is a *topological sort*.\n\n**Kahn's algorithm (BFS on indegrees)** is the version to reach for first, because it detects cycles as a free side effect. The idea: a node with **indegree 0** has no unmet prerequisites, so it can go first. Remove it, decrement its neighbors' indegrees, and repeat.\n\n[[fig:m10-kahn-peel]]\n\n```cpp\nvector<int> indeg(n, 0);\nfor (int u = 0; u < n; u++)\n    for (int v : adj[u]) indeg[v]++;       // directed edge u -> v\nqueue<int> q;\nfor (int i = 0; i < n; i++) if (indeg[i] == 0) q.push(i);\nvector<int> order;\nwhile (!q.empty()) {\n    int u = q.front(); q.pop();\n    order.push_back(u);\n    for (int v : adj[u])\n        if (--indeg[v] == 0) q.push(v);\n}\nif (order.size() != n) { /* CYCLE — no valid ordering */ }\n```\n\n> [!KEY]\n> `order.size() != n` at the end means some nodes never dropped to indegree 0 — they are stuck waiting on each other in a **cycle**. Course Schedule I is literally this one check; Course Schedule II just returns `order`.\n\n**DFS variant (post-order + reverse).** Push each node *after* all its descendants are done, then reverse. Same result, handy when you're already writing a DFS:\n\n```cpp\nvector<int> visited(n, 0), order;\nfunction<void(int)> dfs = [&](int u) {\n    visited[u] = 1;\n    for (int v : adj[u]) if (!visited[v]) dfs(v);\n    order.push_back(u);                     // push AFTER children = post-order\n};\nfor (int i = 0; i < n; i++) if (!visited[i]) dfs(i);\nreverse(order.begin(), order.end());        // reverse post-order = topo order\n```\n\n> [!PITFALL] A boolean `visited` cannot detect a DIRECTED cycle\n> In a DAG it is completely normal to *revisit* a finished node via a different route (a cross edge) — that is not a cycle. Directed cycle detection by DFS needs **three states**: 0 = unvisited, 1 = in the current recursion stack, 2 = done. Only meeting a state-1 node means a back-edge, i.e. a real cycle. Or just use Kahn and count. This distinction is a classic interview gotcha."
+    },
+    {
+      "heading": "Union-Find (DSU): components as edges stream in",
+      "body": "DFS answers \"what are the components?\" for a *fixed* graph. But some problems feed you edges one at a time and keep asking \"are these two connected *yet*?\" or \"how many groups *now*?\". Re-running DFS after every edge is hopeless. **Union-Find (a.k.a. Disjoint Set Union, DSU)** maintains the components incrementally with near-constant-time operations.\n\nThe structure: every node points toward a parent; following parents leads to the **root**, which names the whole set. `find(x)` walks to the root; `unite(a, b)` hangs one root under the other. Two optimizations make it fly: **path compression** (every `find` flattens the walked path to point straight at the root) and **union by rank** (always hang the shorter tree under the taller). Together they make each operation effectively $O(\\alpha(n))$ — inverse Ackermann, a constant below 5 for any input that fits in the universe.\n\n```cpp\nstruct DSU {\n    vector<int> parent, rank_;\n    int components;\n    DSU(int n) : parent(n), rank_(n, 0), components(n) {\n        iota(parent.begin(), parent.end(), 0);   // each node is its own root\n    }\n    int find(int x) {                             // path compression\n        if (parent[x] != x) parent[x] = find(parent[x]);\n        return parent[x];\n    }\n    bool unite(int a, int b) {                    // returns false if already joined\n        a = find(a); b = find(b);\n        if (a == b) return false;                 // <-- detects a cycle / redundant edge\n        if (rank_[a] < rank_[b]) swap(a, b);\n        parent[b] = a;\n        if (rank_[a] == rank_[b]) rank_[a]++;\n        components--;\n        return true;\n    }\n};\n```\n\n[[fig:m10-dsu-merge]]\n\n> [!INTUITION] The return value of `unite` is a cycle detector\n> If `find(a) == find(b)`, then `a` and `b` were *already* connected by some path — so adding edge `(a,b)` closes a **cycle**. `unite` returning `false` is exactly that signal, and it is the entire solution to Redundant Connection and Graph Valid Tree.\n\n> [!WARNING]\n> DSU *without* path compression + union by rank degrades to $O(n)$ per operation and can TLE on a 10⁵-edge OA input. Copy the struct above verbatim — both optimizations, every time. The `components` counter (start at `n`, decrement on each successful `unite`) answers \"how many groups?\" with zero extra work."
+    },
+    {
+      "heading": "Pitfalls, edge cases, and how to narrate",
+      "body": "The bugs below are, in my experience, where graph OA points actually die. Read this list before every timed session until it is boring:\n\n- **Forgetting `visited` / marking too late.** In BFS, mark when you **push**, not when you pop (the `dist[v] == -1` check does this cleanly). Otherwise: exponential enqueues, TLE.\n- **Bounds check order.** Range-check `nr, nc` *before* indexing `grid[nr][nc]`.\n- **Directed vs undirected.** Add both `adj[u].push_back(v)` and `adj[v].push_back(u)` only for undirected graphs. Prerequisites are directed — add one direction, and be deliberate about which way it points (`b → a` = \"b before a\").\n- **Boolean visited on a directed graph** detects revisits, not cycles. Use Kahn or 3-color DFS.\n- **Recursion depth.** Grid DFS on ~10⁶ cells can blow the call stack. If bounds are large, switch to the iterative BFS template.\n- **Off-by-one in level counting.** For \"minimum steps/minutes\", increment the counter once per **level** (snapshot `q.size()` before the inner loop), not once per node.\n\n> [!EXAM] Edge cases to say out loud (and test)\n> Empty grid / zero nodes; a single node; a **disconnected** graph (your outer for-loop over all nodes must exist); self-loops and duplicate edges; already-fully-connected input; unreachable targets (return -1 / leave `dist == -1`).\n\n**Interview narration script** — do this every single time, it is graded:\n\n1. \"This is a graph — nodes are ___, edges mean ___.\" Name the model explicitly.\n2. \"I need shortest steps on an unweighted graph, so **BFS**\" — or — \"I just need reachability/components, so **DFS**.\" One sentence of justification.\n3. State complexity up front: almost everything here is $O(V + E)$ time and space; on a grid $V = R \\cdot C$ and $E \\approx 4RC$, so $O(R \\cdot C)$.\n4. Build the adjacency list out loud, then write the memorized template. Mention `visited` *before* writing the loop — it signals you won't infinite-loop.\n5. If dependencies/ordering appear: \"topological sort — I'll use Kahn's indegree method, which also detects cycles for free.\" That sentence alone lands the whole problem class.\n\n> [!KEY]\n> Speed here is not cleverness, it is **typing templates you already know**. Your goal for this module: write grid-BFS, Kahn, and the DSU struct from memory, each in under three minutes."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Flood Fill",
+      "url": "https://leetcode.com/problems/flood-fill/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The simplest grid DFS/BFS — use it to burn in the direction-array idiom."
+    },
+    {
+      "name": "Number of Islands",
+      "url": "https://leetcode.com/problems/number-of-islands/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Count connected components in a grid — the canonical grid-DFS; each fresh start is one island."
+    },
+    {
+      "name": "Max Area of Island",
+      "url": "https://leetcode.com/problems/max-area-of-island/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Grid DFS that *returns a size* — accumulate cell counts as you traverse."
+    },
+    {
+      "name": "Rotting Oranges",
+      "url": "https://leetcode.com/problems/rotting-oranges/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Multi-source BFS: push all rotten oranges at level 0; levels = minutes elapsed."
+    },
+    {
+      "name": "01 Matrix",
+      "url": "https://leetcode.com/problems/01-matrix/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Multi-source BFS from **all** 0-cells at once — nearest-source distance for every cell."
+    },
+    {
+      "name": "Walls and Gates",
+      "url": "https://leetcode.com/problems/walls-and-gates/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "**Premium** — multi-source BFS from every gate; if locked, 01 Matrix drills the identical idea."
+    },
+    {
+      "name": "Clone Graph",
+      "url": "https://leetcode.com/problems/clone-graph/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "DFS/BFS while building a hashmap old→new node; the map doubles as your visited set."
+    },
+    {
+      "name": "Course Schedule",
+      "url": "https://leetcode.com/problems/course-schedule/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Cycle detection in a directed graph = topological-sort feasibility (Kahn: did you take all n?)."
+    },
+    {
+      "name": "Course Schedule II",
+      "url": "https://leetcode.com/problems/course-schedule-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Return an actual topological order — Kahn's popped sequence IS the answer."
+    },
+    {
+      "name": "Pacific Atlantic Water Flow",
+      "url": "https://leetcode.com/problems/pacific-atlantic-water-flow/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Reverse the flow: BFS/DFS *inward* from both ocean borders (uphill only), intersect the two reach-sets."
+    },
+    {
+      "name": "Surrounded Regions",
+      "url": "https://leetcode.com/problems/surrounded-regions/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Mark border-connected regions first, then flip everything else — solve the complement."
+    },
+    {
+      "name": "Number of Connected Components in an Undirected Graph",
+      "url": "https://leetcode.com/problems/number-of-connected-components-in-an-undirected-graph/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "**Premium** — the textbook DSU problem (components counter); if locked, drill Graph Valid Tree instead."
+    },
+    {
+      "name": "Graph Valid Tree",
+      "url": "https://leetcode.com/problems/graph-valid-tree/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "**Premium** — DSU checklist: exactly n−1 edges, no cycle, one component."
+    },
+    {
+      "name": "Redundant Connection",
+      "url": "https://leetcode.com/problems/redundant-connection/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "DSU: the first edge whose `unite` returns false connects already-joined nodes — that's the answer."
+    },
+    {
+      "name": "Word Ladder",
+      "url": "https://leetcode.com/problems/word-ladder/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Shortest transformation = BFS on an *implicit* graph where words are nodes and one-letter edits are edges."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Rotting Oranges** — a grid holds rotten (2), fresh (1), and empty (0) cells. Each minute every rotten orange rots its 4-adjacent fresh neighbors. Return the number of minutes until no fresh orange remains, or -1 if that never happens.",
+      "url": "https://leetcode.com/problems/rotting-oranges/",
+      "tag": "multi-source-bfs",
+      "answer": "**Why the naive approaches fail.** Running a separate BFS from each rotten orange and taking the per-cell minimum is $O(\\text{sources} \\times \\text{cells})$ and painful to combine. Simulating minute-by-minute (\"scan the whole grid, rot neighbors, repeat\") is $O(\\text{minutes} \\times \\text{cells})$ and subtly bug-prone: an orange rotted *this* minute must not rot others in the *same* minute.\n\n> [!INTUITION] All sources, one queue\n> Seed the BFS queue with **every** rotten orange at once, at level 0, then run one ordinary BFS. Because BFS expands strictly level by level, the level at which a fresh orange is reached is exactly the minute it rots — measured from its **nearest** rotten source, with all sources racing outward in parallel.\n\n[[fig:m10-multi-source]]\n\nThe answer is simply the last level at which anything got rotted.\n\n```cpp\nint orangesRotting(vector<vector<int>>& g) {\n    int R = g.size(), C = g[0].size(), fresh = 0, minutes = 0;\n    queue<pair<int,int>> q;\n    for (int r = 0; r < R; r++)\n        for (int c = 0; c < C; c++) {\n            if (g[r][c] == 2) q.push({r, c});   // ALL sources at level 0\n            else if (g[r][c] == 1) fresh++;\n        }\n    int dr[] = {-1,1,0,0}, dc[] = {0,0,-1,1};\n    while (!q.empty() && fresh > 0) {\n        int sz = q.size();                       // process one whole level\n        for (int i = 0; i < sz; i++) {\n            auto [r, c] = q.front(); q.pop();\n            for (int k = 0; k < 4; k++) {\n                int nr = r+dr[k], nc = c+dc[k];\n                if (nr<0||nr>=R||nc<0||nc>=C||g[nr][nc]!=1) continue;\n                g[nr][nc] = 2;                    // rot it; mark visited in-place\n                fresh--;\n                q.push({nr, nc});\n            }\n        }\n        minutes++;                               // one minute per level\n    }\n    return fresh == 0 ? minutes : -1;            // leftover fresh = unreachable\n}\n```\n\n**Two details that decide correctness:**\n\n- Advance `minutes` once per **level** — the `sz = q.size()` snapshot fences off exactly one minute's worth of oranges. Incrementing per cell inflates the answer wildly.\n- Track `fresh`. It tells you when to stop early (`fresh > 0` in the loop condition avoids counting a phantom extra minute) *and* lets you return -1 for isolated oranges that no wave can reach.\n\n**Complexity:** every cell enters the queue at most once → **time $O(R \\cdot C)$, space $O(R \\cdot C)$**.\n\n**What generalizes:** any \"many things spread simultaneously / distance to nearest X\" problem (01 Matrix, Walls and Gates, forest-fire variants) is this exact pattern — seed all sources at level 0, run one BFS."
+    },
+    {
+      "q": "**Course Schedule** — given `numCourses` and `prerequisites[i] = [a, b]` meaning course `b` must be taken before course `a`, decide whether all courses can be finished. (Course Schedule II asks for an actual valid order.)",
+      "url": "https://leetcode.com/problems/course-schedule/",
+      "tag": "topo-cycle",
+      "answer": "**Why it's really a graph problem.** Draw a directed edge `b → a` — \"b unlocks a\". You can finish everything **iff this directed graph has no cycle**: a cycle is a group of courses each waiting on another, forever.\n\n> [!KEY] The Kahn insight\n> A course with **indegree 0** has no unmet prerequisites → you can take it right now. Taking it deletes its outgoing edges, which may drop other courses to indegree 0. Keep peeling. If all $n$ courses get taken, the graph was a DAG. If you get stuck with courses remaining but none at indegree 0, the leftovers form a cycle.\n\n[[fig:m10-kahn-peel]]\n\n```cpp\nbool canFinish(int n, vector<vector<int>>& pre) {\n    vector<vector<int>> adj(n);\n    vector<int> indeg(n, 0);\n    for (auto& p : pre) { adj[p[1]].push_back(p[0]); indeg[p[0]]++; }  // b -> a\n    queue<int> q;\n    for (int i = 0; i < n; i++) if (indeg[i] == 0) q.push(i);\n    int taken = 0;\n    while (!q.empty()) {\n        int u = q.front(); q.pop(); taken++;\n        for (int v : adj[u]) if (--indeg[v] == 0) q.push(v);\n    }\n    return taken == n;                            // all taken => no cycle\n}\n```\n\n**Course Schedule II is free once you have this:** collect the popped nodes into an `order` vector; return it if `taken == n`, else return `{}`. The pop sequence *is* a valid build order.\n\n**Complexity:** each node is pushed/popped once, each edge decremented once → **time $O(V+E)$, space $O(V+E)$**.\n\n> [!PITFALL] The DFS alternative needs 3 colors\n> Directed cycle detection by DFS requires three states: 0 = unvisited, 1 = **in the current recursion stack**, 2 = done. Reaching a state-1 node means a back-edge → cycle. A plain boolean `visited` is NOT enough for directed graphs — it flags ordinary DAG cross-edges as \"cycles\" or misses real ones depending on how you write it. This is a classic interview gotcha; Kahn sidesteps it entirely.\n\n**What generalizes:** any \"order tasks under dependencies\" question — build systems, compilation order, recipe steps — is Kahn verbatim, with cycle detection included for free."
+    },
+    {
+      "q": "**Pacific Atlantic Water Flow** — water on a cell flows to 4-adjacent neighbors of equal or lower height. The Pacific touches the top and left borders, the Atlantic the bottom and right. Return every cell from which water can reach **both** oceans.",
+      "url": "https://leetcode.com/problems/pacific-atlantic-water-flow/",
+      "tag": "reverse-flow",
+      "answer": "**Why the naive approach fails.** DFS *from every cell* asking \"can I reach the Pacific? the Atlantic?\" costs up to a full grid traversal per cell — $O((R \\cdot C)^2)$ overall. On a 200×200 grid that's ~1.6 billion steps. Dead on arrival.\n\n> [!INTUITION] Invert the question\n> Instead of \"which cells can reach the ocean?\", ask \"which cells can the ocean reach if water flowed **uphill**?\" Start from all ocean-border cells and traverse only to neighbors with height **≥** the current cell (the reverse of the real rule). Every cell touched can drain to that ocean. Two traversals — one per ocean — then intersect. Total: $O(R \\cdot C)$.\n\n```cpp\nvoid bfsReach(vector<vector<int>>& h, queue<pair<int,int>>& q, vector<vector<bool>>& reach) {\n    int R = h.size(), C = h[0].size();\n    int dr[] = {-1,1,0,0}, dc[] = {0,0,-1,1};\n    while (!q.empty()) {\n        auto [r, c] = q.front(); q.pop();\n        for (int k = 0; k < 4; k++) {\n            int nr = r+dr[k], nc = c+dc[k];\n            if (nr<0||nr>=R||nc<0||nc>=C||reach[nr][nc]) continue;\n            if (h[nr][nc] < h[r][c]) continue;    // UPHILL only (reversed flow)\n            reach[nr][nc] = true;\n            q.push({nr, nc});\n        }\n    }\n}\n```\n\n**Assembly:** seed one queue with every Pacific-border cell (top row + left column) and a second with every Atlantic-border cell (bottom row + right column). Run `bfsReach` on each with its own `reach` grid, then collect every cell where **both** grids are true.\n\n**Complexity:** each traversal visits each cell at most once → **time $O(R \\cdot C)$, space $O(R \\cdot C)$**.\n\n**What generalizes:** *swap the direction of the relation and start from the goal.* The same mental unlock powers Surrounded Regions (traverse from the border to find the *un*-captured cells) and many \"which states can reach a target\" problems — search backward from the target instead of forward from everywhere."
+    },
+    {
+      "q": "**Redundant Connection** — a tree with n nodes needs n−1 edges, but you're given n edges (exactly one extra, forming exactly one cycle). Return the edge that can be removed to restore a tree; if several qualify, return the one that appears last in the input.",
+      "url": "https://leetcode.com/problems/redundant-connection/",
+      "tag": "dsu-cycle",
+      "answer": "**Why DSU nails it.** Process the edges in input order and `unite` their endpoints. A tree grows by always joining two *previously disconnected* components. The moment an edge tries to connect two nodes **already in the same component**, that edge closes the cycle — it is the redundant one.\n\n[[fig:m10-dsu-merge]]\n\nAnd the tie-breaking comes free: since exactly one cycle exists, only its edges \"qualify\", and scanning in input order means the first `unite` failure you hit is the *last-in-input-order* edge of that cycle — exactly what the problem asks for.\n\n```cpp\nvector<int> findRedundantConnection(vector<vector<int>>& edges) {\n    int n = edges.size();\n    DSU dsu(n + 1);                               // nodes are 1-indexed\n    for (auto& e : edges)\n        if (!dsu.unite(e[0], e[1]))               // unite returns false => same set\n            return e;                             // this edge made the cycle\n    return {};\n}\n```\n\nThat's it — the DSU struct from the notes plus a single `if`. Which is the real lesson: **once DSU is in your fingers, a chunk of \"hard\" graph problems collapses to a few lines.**\n\n> [!PITFALL]\n> Nodes here are numbered `1..n`, so construct `DSU(n + 1)` — sizing it `n` is an off-by-one crash. And keep path compression + union by rank in the struct; without them each `find` can degrade to $O(n)$ and TLE.\n\n**Complexity:** n `unite` calls at inverse-Ackermann cost each → **time $O(n \\cdot \\alpha(n)) \\approx O(n)$, space $O(n)$** ($\\alpha$ is effectively a small constant).\n\n**What generalizes:** Graph Valid Tree is the same check plus \"exactly n−1 edges and one component\"; Accounts Merge, Kruskal's MST (Module 11), and any \"does this edge add new connectivity?\" question all ride on the same `unite`-returns-false signal."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: \"given an unweighted maze grid, find the **minimum number of moves** from the entrance to the exit.\" Which tool, and why?",
+      "options": [
+        "DFS — it explores every possible path, so it will find the minimum",
+        "BFS — it explores in level order, so the first time the exit is reached is via a fewest-moves path",
+        "Union-Find — cells that connect belong to the same set",
+        "Topological sort — each move depends on the previous one"
+      ],
+      "answer": 1,
+      "explanation": "\"Minimum steps on an unweighted graph\" is the BFS signature: the queue processes all cells at distance d before any at distance d+1, so first arrival = shortest distance. DFS (option A) finds *a* path but can wander arbitrarily far before finding the short one — you'd need to exhaust every path to be sure, which is exponential. DSU answers connectivity, not distance; topo sort needs a DAG of dependencies, which a maze isn't.",
+      "tag": "pattern"
+    },
+    {
+      "q": "In the BFS template, a node is marked visited (`dist[v]` set) **when it is pushed**. A student instead marks nodes when they are **popped**. What happens?",
+      "options": [
+        "Nothing — the two versions are equivalent",
+        "It only breaks on directed graphs",
+        "The same node can be enqueued many times via different neighbors before its first pop — the queue blows up and the program TLEs",
+        "BFS returns wrong distances even on a simple path graph"
+      ],
+      "answer": 2,
+      "explanation": "Between a node's first push and its first pop, every other neighbor that discovers it sees it as 'unvisited' and enqueues it again — on dense graphs this multiplies the queue enormously (potentially exponentially in layered graphs). Distances on a path graph would still come out right (option D is false), which is what makes this bug sneaky: it's a *performance* corruption that only shows as TLE on big tests.",
+      "tag": "bfs-visited"
+    },
+    {
+      "q": "You run Kahn's algorithm on a directed graph with `n = 9` nodes and the final `order.size()` is 7. What do you know for certain?",
+      "options": [
+        "The graph contains at least one cycle — the 2 missing nodes never reached indegree 0",
+        "The graph is disconnected",
+        "Exactly two nodes had indegree 0 at the start",
+        "There is a bug — Kahn's algorithm always outputs all n nodes"
+      ],
+      "answer": 0,
+      "explanation": "A node is output only when its indegree drops to 0, i.e. all its prerequisites were output first. Nodes on (or exclusively fed by) a cycle wait on each other forever and never emerge — so a short output is a *proof* of a cycle. Disconnection (option B) is irrelevant: an isolated node starts at indegree 0 and is output immediately, so disconnected DAGs still produce all n nodes.",
+      "tag": "kahn"
+    },
+    {
+      "q": "In the DSU template, `unite(a, b)` returns `false` exactly when…",
+      "options": [
+        "a or b is out of range",
+        "the two roots have equal rank",
+        "union by rank had to swap a and b",
+        "`find(a) == find(b)` — the nodes are already in the same component, which is how Redundant Connection detects its cycle edge"
+      ],
+      "answer": 3,
+      "explanation": "`unite` first compresses both arguments to their roots; if the roots coincide, the nodes are already connected by some path, so adding this edge would close a cycle — it returns false and changes nothing. Equal ranks (option B) and the swap (option C) are normal parts of a *successful* union. This one boolean is the entire algorithmic content of Redundant Connection and Graph Valid Tree.",
+      "tag": "dsu"
+    },
+    {
+      "q": "Rotting Oranges on the grid `[[2,1,1],[0,1,0]]` (row 0: rotten, fresh, fresh; row 1: empty, fresh, empty). Using correct per-level counting, how many minutes until nothing is fresh?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "-1 (some orange is unreachable)"
+      ],
+      "answer": 1,
+      "explanation": "Minute 1: the source (0,0) rots its only fresh neighbor (0,1). Minute 2: (0,1) rots both (0,2) and (1,1) in the same level. All fresh oranges are gone after 2 minutes. If you incremented the counter per *node* instead of per level you'd report 3 or more — the classic off-by-level bug. -1 is wrong because every fresh orange is 4-connected to the source.",
+      "tag": "trace"
+    },
+    {
+      "q": "What is the time complexity of BFS over an entire R×C grid (the whole flood-fill / islands family)?",
+      "options": [
+        "$O(R \\cdot C \\cdot (R + C))$",
+        "$O((R \\cdot C)^2)$",
+        "$O(R \\cdot C)$ — each cell enters the queue at most once and has at most 4 edges",
+        "$O(R + C)$"
+      ],
+      "answer": 2,
+      "explanation": "The grid is a graph with V = R·C nodes and E ≈ 4·R·C edges, and BFS/DFS are O(V + E) because the visited mark guarantees each node is processed once and each edge looked at a constant number of times. That collapses to O(R·C). Option B is what you get if you *forget* visited or launch a fresh full search per cell — which is exactly why naive Pacific-Atlantic TLEs.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Why can't a plain boolean `visited` array detect a cycle in a **directed** graph via DFS?",
+      "options": [
+        "Because revisiting an already-finished node is perfectly normal in a DAG (a cross edge) — you need a third state, \"in the current recursion stack\", to distinguish a true back-edge",
+        "Because boolean arrays can't store enough information for graphs with more than 2^31 nodes",
+        "It can, as long as you reset the array between the outer-loop DFS calls",
+        "Because directed graphs must be stored as adjacency matrices, not lists"
+      ],
+      "answer": 0,
+      "explanation": "In a directed acyclic graph, two different paths can legally converge on the same node — hitting a visited node proves nothing about cycles. A cycle exists only if DFS meets a node that is still *on the current recursion stack* (a back-edge), hence the 3-color scheme: unvisited / in-stack / done. Option C makes things worse (re-exploration, possible exponential blowup). Kahn's algorithm avoids the whole issue by counting output nodes.",
+      "tag": "directed-cycle"
+    }
+  ],
+  "figures": {
+    "m10-bfs-levels": {
+      "caption": "BFS from source **S** expands in rings: every node in a column is first reached at the same level, and that level **is** its shortest distance. This is why \"minimum steps, unweighted\" always means BFS.",
+      "svg": "<svg viewBox=\"0 0 660 280\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"BFS expanding level by level from a source node\"><text x=\"20\" y=\"24\" class=\"t-bold\">BFS: the level a node is reached at = its distance</text><line x1=\"160\" y1=\"56\" x2=\"160\" y2=\"228\" class=\"s-muted\" stroke-dasharray=\"4 4\"/><line x1=\"300\" y1=\"56\" x2=\"300\" y2=\"228\" class=\"s-muted\" stroke-dasharray=\"4 4\"/><line x1=\"440\" y1=\"56\" x2=\"440\" y2=\"228\" class=\"s-muted\" stroke-dasharray=\"4 4\"/><line x1=\"106\" y1=\"144\" x2=\"212\" y2=\"106\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"106\" y1=\"156\" x2=\"212\" y2=\"194\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"247\" y1=\"100\" x2=\"349\" y2=\"100\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"247\" y1=\"200\" x2=\"349\" y2=\"200\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"386\" y1=\"106\" x2=\"492\" y2=\"144\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"386\" y1=\"194\" x2=\"492\" y2=\"156\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><circle cx=\"90\" cy=\"150\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"90\" y=\"155\" text-anchor=\"middle\" class=\"t-accent t-bold\">S</text><circle cx=\"230\" cy=\"100\" r=\"17\" class=\"f-panel s-line\"/><text x=\"230\" y=\"105\" text-anchor=\"middle\" class=\"t-mono\">A</text><circle cx=\"230\" cy=\"200\" r=\"17\" class=\"f-panel s-line\"/><text x=\"230\" y=\"205\" text-anchor=\"middle\" class=\"t-mono\">B</text><circle cx=\"370\" cy=\"100\" r=\"17\" class=\"f-panel s-line\"/><text x=\"370\" y=\"105\" text-anchor=\"middle\" class=\"t-mono\">C</text><circle cx=\"370\" cy=\"200\" r=\"17\" class=\"f-panel s-line\"/><text x=\"370\" y=\"205\" text-anchor=\"middle\" class=\"t-mono\">D</text><circle cx=\"510\" cy=\"150\" r=\"17\" class=\"f-panel s-line\"/><text x=\"510\" y=\"155\" text-anchor=\"middle\" class=\"t-mono\">E</text><text x=\"90\" y=\"258\" text-anchor=\"middle\" class=\"t-sm t-accent\">dist 0</text><text x=\"230\" y=\"258\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 1</text><text x=\"370\" y=\"258\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 2</text><text x=\"510\" y=\"258\" text-anchor=\"middle\" class=\"t-sm t-muted\">dist 3</text></svg>"
+    },
+    "m10-grid-dirs": {
+      "caption": "The direction-array idiom: from cell **(r, c)**, index `k = 0..3` into `dr`/`dc` generates the up, down, left, right neighbors. Always bounds-check `nr, nc` **before** indexing the grid.",
+      "svg": "<svg viewBox=\"0 0 660 230\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"A grid cell and its four neighbors generated by the direction arrays\"><text x=\"20\" y=\"24\" class=\"t-bold\">grid = implicit graph: neighbors via dr / dc</text><text x=\"20\" y=\"80\" class=\"t-mono t-sm\">dr[] = {-1, 1,  0, 0}</text><text x=\"20\" y=\"106\" class=\"t-mono t-sm\">dc[] = { 0, 0, -1, 1}</text><text x=\"20\" y=\"146\" class=\"t-sm t-muted\">k = 0..3 gives the four</text><text x=\"20\" y=\"168\" class=\"t-sm t-muted\">neighbors of (r, c)</text><text x=\"20\" y=\"208\" class=\"t-sm t-bad\">bounds-check nr, nc FIRST!</text><rect x=\"380\" y=\"60\" width=\"44\" height=\"44\" class=\"f-panel s-line o-35\"/><rect x=\"472\" y=\"60\" width=\"44\" height=\"44\" class=\"f-panel s-line o-35\"/><rect x=\"380\" y=\"152\" width=\"44\" height=\"44\" class=\"f-panel s-line o-35\"/><rect x=\"472\" y=\"152\" width=\"44\" height=\"44\" class=\"f-panel s-line o-35\"/><rect x=\"426\" y=\"60\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"448\" y=\"88\" text-anchor=\"middle\" class=\"t-mono t-sm\">k=0</text><rect x=\"380\" y=\"106\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"402\" y=\"134\" text-anchor=\"middle\" class=\"t-mono t-sm\">k=2</text><rect x=\"426\" y=\"106\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"448\" y=\"134\" text-anchor=\"middle\" class=\"t-mono t-sm t-accent\">r,c</text><rect x=\"472\" y=\"106\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"494\" y=\"134\" text-anchor=\"middle\" class=\"t-mono t-sm\">k=3</text><rect x=\"426\" y=\"152\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"448\" y=\"180\" text-anchor=\"middle\" class=\"t-mono t-sm\">k=1</text></svg>"
+    },
+    "m10-multi-source": {
+      "caption": "Multi-source BFS: both rotten cells (marked **0**) enter the queue together at level 0. Each cell's number is the minute it rots — its distance to the **nearest** source. The two waves race and meet in the middle.",
+      "svg": "<svg viewBox=\"0 0 660 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Grid showing minute each cell is reached by two BFS waves spreading from two sources\"><text x=\"20\" y=\"24\" class=\"t-bold\">two sources spread in parallel</text><rect x=\"20\" y=\"56\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"42\" y=\"84\" text-anchor=\"middle\" class=\"t-mono t-bad t-bold\">0</text><rect x=\"66\" y=\"56\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><text x=\"88\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"112\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"134\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"158\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"204\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"250\" y=\"56\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"272\" y=\"84\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"20\" y=\"102\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><text x=\"42\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"66\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"88\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"112\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"158\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"204\" y=\"102\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"226\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"250\" y=\"102\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><text x=\"272\" y=\"130\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"20\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"42\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"66\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"112\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"134\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"158\" y=\"148\" width=\"44\" height=\"44\" class=\"f-panel2 s-line\"/><text x=\"180\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"204\" y=\"148\" width=\"44\" height=\"44\" class=\"f-accent-soft s-line\"/><text x=\"226\" y=\"176\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"250\" y=\"148\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"272\" y=\"176\" text-anchor=\"middle\" class=\"t-mono t-bad t-bold\">0</text><rect x=\"330\" y=\"64\" width=\"18\" height=\"18\" class=\"f-bad-soft s-bad\"/><text x=\"358\" y=\"78\" class=\"t-sm\">rotten at minute 0 — ALL pushed first</text><rect x=\"330\" y=\"98\" width=\"18\" height=\"18\" class=\"f-accent-soft s-line\"/><text x=\"358\" y=\"112\" class=\"t-sm\">rots at minute 1</text><rect x=\"330\" y=\"132\" width=\"18\" height=\"18\" class=\"f-panel2 s-line\"/><text x=\"358\" y=\"146\" class=\"t-sm\">minute 2</text><rect x=\"330\" y=\"166\" width=\"18\" height=\"18\" class=\"f-panel s-line\"/><text x=\"358\" y=\"180\" class=\"t-sm t-muted\">minute 3 — the waves meet here</text></svg>"
+    },
+    "m10-kahn-peel": {
+      "caption": "Kahn's algorithm on a dependency DAG. Nodes **0** and **1** start at indegree 0 (no unmet prerequisites) and seed the queue. Taking them decrements their neighbors' indegrees, releasing 2 and 3 next. If fewer than n nodes ever come out, the leftovers form a cycle.",
+      "svg": "<svg viewBox=\"0 0 660 290\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Directed acyclic graph with indegree labels showing Kahn's algorithm peeling indegree-zero nodes\"><text x=\"20\" y=\"24\" class=\"t-bold\">Kahn: peel indegree-0 nodes</text><text x=\"480\" y=\"24\" class=\"t-mono t-accent\">queue = [0, 1]</text><line x1=\"99\" y1=\"120\" x2=\"200\" y2=\"120\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"94\" y1=\"201\" x2=\"203\" y2=\"131\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"99\" y1=\"210\" x2=\"200\" y2=\"210\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"236\" y1=\"125\" x2=\"341\" y2=\"159\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"236\" y1=\"205\" x2=\"341\" y2=\"171\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"379\" y1=\"165\" x2=\"480\" y2=\"165\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><circle cx=\"80\" cy=\"120\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"80\" y=\"125\" text-anchor=\"middle\" class=\"t-mono t-ok\">0</text><circle cx=\"80\" cy=\"210\" r=\"17\" class=\"f-ok-soft s-ok\"/><text x=\"80\" y=\"215\" text-anchor=\"middle\" class=\"t-mono t-ok\">1</text><circle cx=\"220\" cy=\"120\" r=\"17\" class=\"f-panel s-line\"/><text x=\"220\" y=\"125\" text-anchor=\"middle\" class=\"t-mono\">2</text><circle cx=\"220\" cy=\"210\" r=\"17\" class=\"f-panel s-line\"/><text x=\"220\" y=\"215\" text-anchor=\"middle\" class=\"t-mono\">3</text><circle cx=\"360\" cy=\"165\" r=\"17\" class=\"f-panel s-line\"/><text x=\"360\" y=\"170\" text-anchor=\"middle\" class=\"t-mono\">4</text><circle cx=\"500\" cy=\"165\" r=\"17\" class=\"f-panel s-line\"/><text x=\"500\" y=\"170\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"80\" y=\"88\" text-anchor=\"middle\" class=\"t-sm t-ok\">in 0</text><text x=\"80\" y=\"248\" text-anchor=\"middle\" class=\"t-sm t-ok\">in 0</text><text x=\"220\" y=\"88\" text-anchor=\"middle\" class=\"t-sm t-muted\">in 2</text><text x=\"220\" y=\"248\" text-anchor=\"middle\" class=\"t-sm t-muted\">in 1</text><text x=\"360\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">in 2</text><text x=\"500\" y=\"127\" text-anchor=\"middle\" class=\"t-sm t-muted\">in 1</text><text x=\"20\" y=\"278\" class=\"t-sm t-muted\">take 0 and 1 → indegrees drop → 2 then 3 join the queue; output shorter than n = cycle</text></svg>"
+    },
+    "m10-dsu-merge": {
+      "caption": "DSU as a cycle detector: nodes 2 and 3 already share root **1**, so when edge (2, 3) arrives, `unite` finds equal roots and returns false — that edge is the redundant one. Node 5's set has a different root, so uniting across sets would succeed.",
+      "svg": "<svg viewBox=\"0 0 660 260\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Two union-find trees; a dashed edge between two nodes with the same root closes a cycle\"><text x=\"20\" y=\"24\" class=\"t-bold\">unite(2, 3) fails → edge (2, 3) closes the cycle</text><line x1=\"99\" y1=\"176\" x2=\"139\" y2=\"117\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"201\" y1=\"176\" x2=\"161\" y2=\"117\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"340\" y1=\"173\" x2=\"340\" y2=\"121\" class=\"s-line\" stroke-width=\"2\" marker-end=\"url(#dg-arrow)\"/><line x1=\"107\" y1=\"190\" x2=\"193\" y2=\"190\" class=\"s-bad\" stroke-width=\"2\" stroke-dasharray=\"6 4\"/><circle cx=\"150\" cy=\"100\" r=\"17\" class=\"f-accent-soft s-accent\"/><text x=\"150\" y=\"105\" text-anchor=\"middle\" class=\"t-mono t-accent\">1</text><circle cx=\"90\" cy=\"190\" r=\"17\" class=\"f-panel s-line\"/><text x=\"90\" y=\"195\" text-anchor=\"middle\" class=\"t-mono\">2</text><circle cx=\"210\" cy=\"190\" r=\"17\" class=\"f-panel s-line\"/><text x=\"210\" y=\"195\" text-anchor=\"middle\" class=\"t-mono\">3</text><circle cx=\"340\" cy=\"100\" r=\"17\" class=\"f-panel s-line\"/><text x=\"340\" y=\"105\" text-anchor=\"middle\" class=\"t-mono\">4</text><circle cx=\"340\" cy=\"190\" r=\"17\" class=\"f-panel s-line\"/><text x=\"340\" y=\"195\" text-anchor=\"middle\" class=\"t-mono\">5</text><text x=\"150\" y=\"66\" text-anchor=\"middle\" class=\"t-sm t-accent\">root</text><text x=\"150\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-bad\">new edge (2,3): same root → cycle!</text><text x=\"340\" y=\"232\" text-anchor=\"middle\" class=\"t-sm t-muted\">different set: unite would succeed</text><text x=\"430\" y=\"95\" class=\"t-mono t-sm\">find(2) = 1</text><text x=\"430\" y=\"121\" class=\"t-mono t-sm\">find(3) = 1</text><text x=\"430\" y=\"147\" class=\"t-sm\">same root → unite returns false</text><text x=\"430\" y=\"173\" class=\"t-sm t-muted\">path compression flattens each walk</text></svg>"
+    }
+  }
+}

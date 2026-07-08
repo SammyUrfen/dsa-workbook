@@ -1,0 +1,268 @@
+{
+  "tag": "m03",
+  "week": "Week 1 · Module 03",
+  "title": "Stack & Monotonic Stack",
+  "priority": "review",
+  "summary": "A stack gives you $O(1)$ access to the *most recently seen unresolved* thing — and a **monotonic** stack turns every \"nearest greater/smaller\" scan from $O(n^2)$ brute force into a single $O(n)$ pass. This is the classic OA \"aha\" pattern: recognizing it under time pressure is worth more than any single practiced problem.",
+  "notes": [
+    {
+      "heading": "When a stack is the answer",
+      "body": "You already have solid stack instincts from your implementation work — this module is about upgrading those instincts into fast **pattern recognition**. The core fact: a stack answers one question in $O(1)$ — *\"what is the most recently seen element that is still unresolved?\"* That one sentence covers a surprising range of problems. Reach for a stack when:\n\n- You need to **match / pair / nest** things: brackets, tags, directories, \"the most recent unclosed X\". LIFO ordering is the whole game.\n- The phrase **\"next greater / next smaller / previous greater / previous smaller\"** appears — explicitly, or in disguise: \"days until warmer\", \"stock span\", \"how far can you see\".\n- You're computing something over ranges whose answer is bounded by a **min or max**, and the brute force scans all pairs/subarrays: histogram-style problems (largest rectangle, trapping water, sum of subarray minimums).\n- You catch yourself writing a nested loop where the inner loop scans **left or right until a condition breaks**. That \"scan until bigger/smaller\" is a monotonic stack in disguise.\n- You must **evaluate or simplify** an expression respecting nesting or precedence: RPN, calculators, `k[...]` decoding, path canonicalization.\n\n> [!KEY] The waiting model\n> An element sits on the stack while it is still **waiting** for its answer. The element that pops it off **is** its answer. Every monotonic-stack problem in this module is this one sentence wearing a different costume — learn it once and the whole family unlocks.\n\n> [!EXAM]\n> Monotonic stack is the classic trick that collapses an $O(n^2)$ brute force to $O(n)$. In a timed OA, aim to *recognize* the shape within 30 seconds: the words \"next greater\", a distance-to-something question, or an inner loop that scans until a comparison breaks are your triggers."
+    },
+    {
+      "heading": "Template A — the plain stack for matching and parsing",
+      "body": "The plain stack handles the *matching* family: every \"open\" is a promise that must be kept by the **most recent** unmatched partner. Valid Parentheses is the canonical form — memorize this template, because Simplify Path, Decode String, and Remove Adjacent Duplicates are all the same skeleton with different push/pop rules.\n\n> [!ANALOGY]\n> Think of nested function calls: when a function returns, it must be the **innermost** one still running — you can't return from `main` while a helper is mid-flight. Brackets work the same way: a closer must match the most recently opened, still-unclosed bracket. LIFO is not a convenience here; it *is* the problem's structure.\n\n```cpp\nbool validParentheses(const string& s) {\n    stack<char> st;\n    unordered_map<char,char> match = {{')','('}, {']','['}, {'}','{'}};\n    for (char c : s) {\n        if (c=='(' || c=='[' || c=='{') {\n            st.push(c);                 // open bracket: wait for its partner\n        } else {                        // close bracket: must match top\n            if (st.empty() || st.top() != match[c]) return false;\n            st.pop();                   // matched — resolved\n        }\n    }\n    return st.empty();                  // nothing left waiting\n}\n```\n\n[[fig:m03-bracket-match]]\n\n> [!PITFALL]\n> Two bugs kill this in OAs: (1) calling `st.top()` on an empty stack — undefined behavior in C++, so the `st.empty()` guard comes **first** in the condition; input `\")(\"` exposes it. (2) Returning `true` at the end instead of `st.empty()` — input `\"(((\"` finishes the loop happily but leaves three opens waiting, and must fail."
+    },
+    {
+      "heading": "Template B — the monotonic stack",
+      "body": "A **monotonic stack** is a plain stack with one extra rule: its contents stay sorted (increasing or decreasing from bottom to top). When a new element would break that order, you **pop** — and the moment of popping is exactly when the popped element's answer arrives.\n\n> [!INTUITION] Who resolves whom?\n> Picture people in a line, each waiting to spot the first taller person to their right. Short people keep waiting; when a tall person walks in, they resolve *everyone* shorter who was still waiting — all at once, most recent first. The stack holds exactly the still-waiting people, and they're automatically in decreasing height order (anyone shorter than a neighbor below them would already have been resolved... by someone taller in between — impossible, or they'd both be gone).\n\nStore **indices**, not values — you almost always need the position to compute distances or index back into the array. Then decide the pop condition with one question: *\"while the stack top is worse than the current element, the current element is the answer for the top.\"*\n\n```cpp\n// Next Greater Element to the RIGHT for every index.\n// ans[i] = value of the first element to the right of i that is > nums[i], else -1.\nvector<int> nextGreater(const vector<int>& nums) {\n    int n = nums.size();\n    vector<int> ans(n, -1);\n    stack<int> st;                      // holds INDICES, values strictly decreasing top->bottom\n    for (int i = 0; i < n; ++i) {\n        // current nums[i] resolves every waiting index smaller than it\n        while (!st.empty() && nums[st.top()] < nums[i]) {\n            ans[st.top()] = nums[i];    // nums[i] is the next-greater for st.top()\n            st.pop();\n        }\n        st.push(i);                     // i now waits for ITS next-greater\n    }\n    return ans;                         // indices still on stack keep -1\n}\n```\n\n[[fig:m03-nge-pop]]\n\n> [!EXAMPLE] Trace `[2,1,5,6,2,3]`\n> `i=0`: stack empty → push 0. `i=1`: 1 < 2, no pop → push 1. Stack `[0,1]`, values 2,1 — decreasing.\n> `i=2` (value 5): 5 > 1 → pop 1, `ans[1]=5`; 5 > 2 → pop 0, `ans[0]=5`; push 2.\n> `i=3` (value 6): pops 2, `ans[2]=6`; push 3. `i=4` (value 2): push. `i=5` (value 3): 3 > 2 → pop 4, `ans[4]=3`; push 5.\n> Final: `ans = [5,5,6,-1,3,-1]` — indices 3 and 5 never met anything greater.\n\n> [!KEY] Amortized $O(n)$\n> Yes, there's a `while` inside the `for` — but each index is pushed exactly once and popped at most once, so total work is $O(n)$. Say this out loud in interviews; the amortized argument is exactly what they're listening for."
+    },
+    {
+      "heading": "The four variants — one table, zero guesswork",
+      "body": "Every monotonic-stack question is one of four variants. Memorize this table and you never have to re-derive the direction under pressure:\n\n| Want | Scan direction | Pop while |\n|------|----------------|-----------|\n| Next greater (right) | left → right | `top < cur` |\n| Next smaller (right) | left → right | `top > cur` |\n| Previous greater (left) | left → right | `top < cur`, answer = new top after popping |\n| Previous smaller (left) | left → right | `top > cur`, answer = new top after popping |\n\nFor the \"next\" variants, you record the answer **at the moment of popping** (the current element resolves the popped one). For the \"previous\" variants you don't record on pop — instead, **after popping**, whatever remains on top is the previous-greater/smaller of the *current* element. Same loop, different harvest point.\n\n> [!KEY] Ties are a decision, not an accident\n> `<` vs `<=` in the pop condition controls tie handling — strictly greater vs greater-or-equal. In Largest Rectangle it decides whether equal-height bars merge or double-count; in Sum of Subarray Minimums, one side is deliberately strict and the other non-strict so duplicated minimums are counted **exactly once**. Choose the comparison *on purpose*, then test with an all-equal input like `[2,2,2]`.\n\n> [!PITFALL]\n> Don't try to be clever and scan right-to-left for \"previous\" variants from memory — you *can* (previous-greater scanning right-to-left mirrors next-greater), but mixing the two conventions mid-interview is a classic way to flip a comparison. Pick the left-to-right convention in the table and stick to it."
+    },
+    {
+      "heading": "Sentinels, flushes, and the bugs that eat OA points",
+      "body": "Monotonic-stack solutions fail in predictable ways. Run this checklist before you hit submit:\n\n1. **Storing values instead of indices.** For anything involving distance, width, or boundaries, push indices and index into the array. Raw values throw away the position you need — Daily Temperatures is unsolvable that way.\n2. **Forgetting the flush.** Elements still on the stack when the loop ends are unresolved. Either that's the correct semantics (NGE keeps them at `-1`) or you must drain them — the histogram trick appends a **sentinel** bar of height 0 that is smaller than everything, forcing every survivor to pop and be measured.\n3. **No `st.empty()` guard.** `st.top()` on an empty stack is undefined behavior in C++, not an exception. Guard every `top()` and `pop()`.\n4. **Integer overflow.** Areas and subarray sums overflow `int` ($10^5 \\times 10^4 > 2^{31}$). Use `long long`, and apply the modulus where required.\n\n> [!WARNING] The sentinel test\n> A strictly **increasing** input like `[1,2,3,4,5]` never triggers a single pop. If your histogram code returns 0 on it, you forgot the flush. Strictly increasing and strictly decreasing sequences are *the* stress tests for monotonic-stack code — always run both mentally.\n\n> [!NOTE] Circular arrays (Next Greater Element II)\n> Iterate `i` from `0` to `2n-1` and read `nums[i % n]`, so every element gets a second chance to find its answer \"around the corner\" — but only **push** indices `< n` (or push `i % n` only on the first lap) so nothing is answered twice.\n\n> [!EXAM]\n> Edge cases to check silently in an OA: empty input, single element, all-equal elements, strictly increasing, strictly decreasing — and for parentheses, an unmatched closer at position 0 (`\")\"`) and leftover opens at the end."
+    },
+    {
+      "heading": "How to narrate it — the interview playbook",
+      "body": "For Microsoft-style live rounds (and it sharpens your OA thinking too), the *narration* is graded as much as the code. Here's the five-step script:\n\n1. **State the brute force first**: \"naively, for each bar I'd scan left and right until a smaller one — $O(n^2)$.\"\n2. **Say the magic sentence**: *\"I notice each element only needs its nearest smaller/greater neighbor, so a monotonic stack gives me that in one pass.\"* This one sentence signals pattern recognition — exactly what interviewers grade.\n3. **Declare the invariant out loud**: \"I'll keep a stack of indices with strictly increasing heights; when the current bar is shorter, I pop and finalize those bars.\"\n4. **Walk a small example** (e.g. `[2,1,5,6,2,3]`) through the stack to prove correctness *before* coding.\n5. **Close with the amortized argument**: \"each index is pushed and popped at most once, so it's $O(n)$ total despite the nested while.\" Volunteer it — don't wait to be asked.\n\n> [!EXAM]\n> In Codility/HackerRank OAs there's no one to narrate to — but steps 3 and 4 still pay: write the invariant as a one-line comment above the loop, and trace `[2,1,5,6,2,3]` on paper before submitting. Thirty seconds of tracing catches the flipped `<` that would cost you a full resubmit cycle."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Valid Parentheses",
+      "url": "https://leetcode.com/problems/valid-parentheses/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "Plain stack matching, the canonical warmup — every closer must match the most recent open; finish with `return st.empty()`."
+    },
+    {
+      "name": "Baseball Game",
+      "url": "https://leetcode.com/problems/baseball-game/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Stack as a running record you push, pop, and mutate per operation."
+    },
+    {
+      "name": "Min Stack",
+      "url": "https://leetcode.com/problems/min-stack/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Augment the stack: pair each value with the running min so `getMin()` is $O(1)$."
+    },
+    {
+      "name": "Remove All Adjacent Duplicates In String",
+      "url": "https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Stack collapses matching neighbors — pop when the top equals the current char, else push."
+    },
+    {
+      "name": "Next Greater Element I",
+      "url": "https://leetcode.com/problems/next-greater-element-i/",
+      "difficulty": "Easy",
+      "oa": true,
+      "note": "The monotonic-stack primitive: precompute next-greater over the big array, then map answers back."
+    },
+    {
+      "name": "Daily Temperatures",
+      "url": "https://leetcode.com/problems/daily-temperatures/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Next-greater where the answer is the *distance* — store indices so `i - st.top()` is available at pop time."
+    },
+    {
+      "name": "Next Greater Element II",
+      "url": "https://leetcode.com/problems/next-greater-element-ii/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Circular array: iterate `i` up to `2n-1` with `nums[i % n]`, but only push indices `< n`."
+    },
+    {
+      "name": "Evaluate Reverse Polish Notation",
+      "url": "https://leetcode.com/problems/evaluate-reverse-polish-notation/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Stack-based expression evaluation — pop two, apply the operator, push the result; watch operand order for `-` and `/`."
+    },
+    {
+      "name": "Asteroid Collision",
+      "url": "https://leetcode.com/problems/asteroid-collision/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Stack simulation: resolve collisions while pushing — keep popping while the top explodes."
+    },
+    {
+      "name": "Decode String",
+      "url": "https://leetcode.com/problems/decode-string/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Two stacks (counts + partial strings) handle nested `k[...]` cleanly."
+    },
+    {
+      "name": "Simplify Path",
+      "url": "https://leetcode.com/problems/simplify-path/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Stack of path components: `..` pops, `.` and empty segments are skipped, then rejoin."
+    },
+    {
+      "name": "Trapping Rain Water",
+      "url": "https://leetcode.com/problems/trapping-rain-water/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Monotonic decreasing stack fills water in horizontal layers — also know the $O(1)$-space two-pointer version."
+    },
+    {
+      "name": "Largest Rectangle in Histogram",
+      "url": "https://leetcode.com/problems/largest-rectangle-in-histogram/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "THE monotonic-stack masterpiece: fix each bar as the limiting height; one pop reveals both smaller boundaries."
+    },
+    {
+      "name": "Maximal Rectangle",
+      "url": "https://leetcode.com/problems/maximal-rectangle/",
+      "difficulty": "Hard",
+      "oa": true,
+      "note": "Reduce each matrix row to a histogram of consecutive 1s above it, then run Largest Rectangle per row."
+    },
+    {
+      "name": "Sum of Subarray Minimums",
+      "url": "https://leetcode.com/problems/sum-of-subarray-minimums/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Contribution trick: count the subarrays where each element is the min via prev-smaller / next-smaller-or-equal spans."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Largest Rectangle in Histogram** — given bar heights, find the area of the largest axis-aligned rectangle that fits entirely under the skyline.",
+      "url": "https://leetcode.com/problems/largest-rectangle-in-histogram/",
+      "tag": "histogram",
+      "answer": "**Why the naive approach fails.** For each bar you could expand left and right while neighboring bars are ≥ its height — that's $O(n^2)$, and with $n$ up to $10^5$ it times out. The waste in the brute force: you keep *recomputing* the same boundaries over and over.\n\n> [!INTUITION] Fix the shortest bar\n> Every rectangle under the skyline is capped by *some* shortest bar. So flip the search: for each bar `i`, ask \"what's the biggest rectangle in which **this** bar is the shortest one?\" Its width is bounded by the **previous smaller** bar on the left and the **next smaller** bar on the right. Trying every bar as the cap covers every candidate rectangle — nothing is missed.\n\nWidth = `right_smaller - left_smaller - 1`, area = `height[i] * width`.\n\n**The one-pass trick.** A single left-to-right sweep with a **monotonic increasing stack of indices** finds *both* boundaries at the same instant. When bar `i` is about to break the increasing order (`h[i] < h[st.top()]`), that means `i` is the **next-smaller-to-the-right** for the popped bar — and after popping, the **new stack top** is its **previous-smaller-to-the-left**. So the popped bar's full width is known the moment it pops.\n\n[[fig:m03-histogram-cap]]\n\n```cpp\nint largestRectangleArea(vector<int>& h) {\n    int n = h.size(), best = 0;\n    stack<int> st;                      // indices, heights strictly increasing bottom->top\n    for (int i = 0; i <= n; ++i) {\n        int cur = (i == n) ? 0 : h[i];  // sentinel 0 flushes the whole stack at the end\n        while (!st.empty() && h[st.top()] > cur) {\n            int height = h[st.top()]; st.pop();\n            // right boundary = i (first smaller to the right)\n            // left boundary  = st.top() after pop (first smaller to the left), or -1\n            int leftBound = st.empty() ? -1 : st.top();\n            int width = i - leftBound - 1;\n            best = max(best, height * width);\n        }\n        st.push(i);\n    }\n    return best;\n}\n```\n\n> [!KEY] Why the sentinel matters\n> The trailing `cur = 0` (when `i == n`) is guaranteed smaller than every real bar, so it forces every remaining bar to pop and be measured. Without it, a strictly increasing histogram never pops anything and you return 0. This sentinel/flush idiom recurs across monotonic-stack problems — internalize it.\n\n**Complexity.** $O(n)$ time — each index is pushed once and popped at most once — and $O(n)$ space.\n\n**What generalizes.** Maximal Rectangle is literally this problem run once per matrix row (build a histogram of consecutive 1s above each cell, take the max over rows). And the \"pop reveals both smaller neighbors\" move is the engine behind Sum of Subarray Minimums too."
+    },
+    {
+      "q": "**Trapping Rain Water** — given an elevation map of bar heights, compute how much water is trapped between the bars after it rains.",
+      "url": "https://leetcode.com/problems/trapping-rain-water/",
+      "tag": "layers",
+      "answer": "**Why one naive idea fails.** \"For each index, water = `min(maxLeft, maxRight) - height`\" is correct, but recomputing `maxLeft`/`maxRight` per index is $O(n^2)$. Prefix-max/suffix-max arrays fix that in $O(n)$ — but the *stack* version teaches a different, transferable idea: instead of measuring water **column by column**, fill it **layer by layer, horizontally**.\n\n> [!INTUITION] Three roles at pop time\n> Keep a **decreasing** stack of indices. Water gets trapped the moment you see a bar *taller* than the stack top: the current bar is the **right wall**, the popped bar is the **floor** of a horizontal slab, and the new top (after popping) is the **left wall**. One pop = one rectangular slab of water, fully measured.\n\nStep by step, when `height[i] > height[st.top()]`:\n\n1. Pop the floor: `bottom = st.top()`.\n2. If the stack is now empty there's no left wall — stop (water spills out the left).\n3. Left wall = new `st.top()`, right wall = `i`.\n4. Bounded height of this slab = `min(height[left], height[i]) - height[bottom]`.\n5. Width = `i - left - 1`. Add `bounded * width`.\n\n[[fig:m03-water-slab]]\n\n```cpp\nint trap(vector<int>& h) {\n    int n = h.size(), water = 0;\n    stack<int> st;                      // indices, heights decreasing bottom->top\n    for (int i = 0; i < n; ++i) {\n        while (!st.empty() && h[i] > h[st.top()]) {\n            int bottom = st.top(); st.pop();\n            if (st.empty()) break;      // no left wall\n            int left = st.top();\n            int bounded = min(h[left], h[i]) - h[bottom];\n            water += bounded * (i - left - 1);\n        }\n        st.push(i);\n    }\n    return water;\n}\n```\n\n**Complexity.** $O(n)$ time, $O(n)$ space — the usual push-once/pop-once argument.\n\n> [!EXAM]\n> The two-pointer solution is $O(1)$ space and often preferred in interviews — know **both**, and volunteer the tradeoff: \"the stack view fills horizontal layers in one pass; two pointers get the same $O(n)$ with constant space by moving the side with the smaller max inward.\" Naming the alternative is free credit."
+    },
+    {
+      "q": "**Sum of Subarray Minimums** — over *every* contiguous subarray, sum its minimum element; $n$ up to $3 \\cdot 10^4$, answer modulo $10^9+7$.",
+      "url": "https://leetcode.com/problems/sum-of-subarray-minimums/",
+      "tag": "contribution",
+      "answer": "**Why the naive approach fails.** There are $O(n^2)$ subarrays; enumerating each and taking its min is $O(n^2)$ or worse — too slow, and it's also the wrong *mental frame*.\n\n> [!KEY] Flip the question\n> Instead of \"for each subarray, what's its min?\", ask **\"for each element, in how many subarrays is IT the minimum?\"** Each such subarray contributes `nums[i]` to the total, so `answer = Σ nums[i] × (number of subarrays where nums[i] is the min)`. This \"contribution of each element as a range extremum\" reframe is one of the highest-leverage tricks in the whole prep.\n\n**Counting the subarrays.** Element `i` is the minimum of a subarray exactly when the subarray extends left no further than the **previous strictly-smaller** element, and right no further than the **next smaller-or-equal** element. If `left` = number of valid start positions and `right` = number of valid end positions, then `i` is the min of `left × right` subarrays — starts and ends combine independently.\n\n[[fig:m03-contribution-span]]\n\n> [!PITFALL] The asymmetric boundary is the crux\n> Strict `<` on one side, `<=` on the other. With duplicates (say two equal 2s), a subarray containing both minimums must be credited to **exactly one** of them: the asymmetry hands it to the leftmost. Strict on both sides counts it zero times; non-strict on both sides counts it twice. Test with `[2,2,2]`: the answer should be $2 \\times 6 = 12$ (six subarrays, min always 2).\n\nBoth boundary arrays come from monotonic stacks — one forward pass (pop on `>` for previous *strictly* smaller) and one backward pass (pop on `>=` for next smaller-*or-equal*):\n\n```cpp\n// left[i]: # of contiguous elements ending at i where nums[i] is the min (using > to pop => strict left)\n// right[i]: same to the right (using >= to pop => non-strict right, breaks ties)\nlong long sumSubarrayMins(vector<int>& a) {\n    const long long MOD = 1e9+7;\n    int n = a.size();\n    vector<long long> left(n), right(n);\n    stack<int> st;\n    for (int i = 0; i < n; ++i) {                 // previous strictly smaller\n        while (!st.empty() && a[st.top()] > a[i]) st.pop();\n        left[i] = st.empty() ? i + 1 : i - st.top();\n        st.push(i);\n    }\n    while (!st.empty()) st.pop();\n    for (int i = n - 1; i >= 0; --i) {            // next smaller-or-equal\n        while (!st.empty() && a[st.top()] >= a[i]) st.pop();\n        right[i] = st.empty() ? n - i : st.top() - i;\n        st.push(i);\n    }\n    long long ans = 0;\n    for (int i = 0; i < n; ++i)\n        ans = (ans + a[i] * left[i] % MOD * right[i]) % MOD;\n    return ans;\n}\n```\n\n**Complexity.** $O(n)$ time, $O(n)$ space.\n\n**What generalizes.** The same contribution template solves sum of subarray **maximums** (flip comparisons), sum of subarray ranges (max − min: run it twice and subtract), and a family of \"aggregate over all subarrays\" OA questions. Master it here and those become five-minute problems."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: *\"for each day, how many days until a warmer temperature?\"* Which approach fits best, and why?",
+      "options": [
+        "Sliding window — track a window of days whose temperatures are below the current one",
+        "Monotonic decreasing stack of indices — each day waits on the stack until a warmer day pops it",
+        "Sort the days by temperature and binary search for the next warmer one",
+        "Precompute prefix maxima and scan left to right"
+      ],
+      "answer": 1,
+      "explanation": "This is \"next greater element\" in disguise — the answer for day `i` is the index gap to the first warmer day, which is exactly what a monotonic stack of indices delivers at pop time. A sliding window doesn't apply because \"days until warmer\" isn't a contiguous-window property; sorting destroys the index order you need for distances; prefix maxima tell you about the *past*, not the next warmer day in the *future*.",
+      "tag": "pattern"
+    },
+    {
+      "q": "You change the next-greater template to push **values** instead of indices. Which problem becomes unsolvable with that version?",
+      "options": [
+        "Valid Parentheses",
+        "Evaluate Reverse Polish Notation",
+        "Next Greater Element I",
+        "Daily Temperatures"
+      ],
+      "answer": 3,
+      "explanation": "Daily Temperatures needs the *distance* `i - st.top()`, which requires the waiting element's **index** at pop time — a raw value can't recover its position. Next Greater Element I only needs the value of the next greater element (and NGE I guarantees distinct values), so values alone still work there. Valid Parentheses and RPN are plain-stack problems that never needed indices in the first place. Rule of thumb: always push indices; you can always look values up, never the reverse.",
+      "tag": "template"
+    },
+    {
+      "q": "The monotonic-stack template has a `while` loop nested inside a `for` loop. What is the total running time over $n$ elements?",
+      "options": [
+        "$O(n)$ — each index is pushed once and popped at most once",
+        "$O(n \\log n)$ — the stack behaves like a balanced structure",
+        "$O(n^2)$ in the worst case — the while loop can run $n$ times per iteration",
+        "It depends on the range of the values"
+      ],
+      "answer": 0,
+      "explanation": "Charge the work to elements, not iterations: every index enters the stack exactly once and leaves at most once, so all `while` iterations across the entire run total at most $n$ pops — $O(n)$ amortized. The $O(n^2)$ answer is the classic trap: a single iteration *can* pop many elements, but those elements are gone forever, so the cost can't repeat. Volunteering this amortized argument in an interview is worth real points.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Run the next-greater template on `nums = [4,3,2,5]`. Immediately after processing `i = 3`, what are `ans` and the stack (of indices)?",
+      "options": [
+        "`ans = [-1,-1,5,-1]`, stack = `[0,1,3]`",
+        "`ans = [5,5,5,-1]`, stack = `[]`",
+        "`ans = [5,5,5,-1]`, stack = `[3]`",
+        "`ans = [-1,5,5,-1]`, stack = `[3]`"
+      ],
+      "answer": 2,
+      "explanation": "After `i = 2` the stack is `[0,1,2]` (values 4,3,2 — decreasing, all still waiting). Then 5 arrives and beats every one of them: pop 2 (`ans[2]=5`), pop 1 (`ans[1]=5`), pop 0 (`ans[0]=5`). Finally index 3 is **pushed** — it now waits for its own next greater, so the stack is `[3]`, not empty, and `ans[3]` stays `-1`.",
+      "tag": "trace"
+    },
+    {
+      "q": "You remove the sentinel from Largest Rectangle in Histogram (loop runs only to `n-1`, no `cur = 0` flush). Which input now returns a **wrong** answer?",
+      "options": [
+        "`[3,1,3]`",
+        "`[1,2,3,4,5]`",
+        "`[5,4,3,2,1]`",
+        "`[3,1,2]`"
+      ],
+      "answer": 1,
+      "explanation": "A strictly **increasing** histogram never triggers a single pop — without the sentinel flush, no bar is ever measured and you return 0 instead of 9 (height 3 × width 3). `[5,4,3,2,1]` pops at every step, and the areas measured along the way already include the true best (9), so it survives. In `[3,1,3]` and `[3,1,2]` the bar of height 1 spans everything and its best area gets matched by pops that do fire. The sentinel exists precisely for the \"nothing ever pops\" case.",
+      "tag": "sentinel"
+    },
+    {
+      "q": "In Sum of Subarray Minimums, why does the standard solution pop with strict `>` on the left pass but `>=` on the right pass?",
+      "options": [
+        "So a subarray whose minimum value appears multiple times is credited to exactly one occurrence",
+        "It keeps the stack size bounded by $O(\\log n)$ instead of $O(n)$",
+        "It is required for the modular arithmetic to distribute over the product",
+        "It lets both passes be merged into a single left-to-right loop"
+      ],
+      "answer": 0,
+      "explanation": "With duplicates (e.g. `[2,5,2]`), the subarray `[2,5,2]` has its minimum 2 at two positions — the asymmetric strict/non-strict boundary assigns that subarray to exactly one of them (the leftmost). Strict on both sides would count it zero times; non-strict on both sides would count it twice. It has nothing to do with stack size (still $O(n)$), the modulus, or merging loops — it's purely a tie-breaking correctness rule. Test your tie logic with `[2,2,2]` → answer 12.",
+      "tag": "ties"
+    },
+    {
+      "q": "A classmate's Valid Parentheses solution is correct except it ends with `return true;` instead of `return st.empty();`. Which input exposes the bug?",
+      "options": [
+        "`\")(\"`",
+        "`\"([)]\"`",
+        "`\"()[]{}\"`",
+        "`\"(((\"`"
+      ],
+      "answer": 3,
+      "explanation": "`\"(((\"` sails through the loop — every character is an open bracket, so nothing is ever checked — and the buggy version returns `true` while three opens are still waiting on the stack. `\")(\"` is caught earlier by the `st.empty()` guard on the closer, `\"([)]\"` is caught by the top-mismatch check, and `\"()[]{}\"` is genuinely valid. The final `st.empty()` is the third check of the template, and it's the one people forget: matched-so-far is not the same as fully matched.",
+      "tag": "bug"
+    }
+  ],
+  "figures": {
+    "m03-bracket-match": {
+      "caption": "Template A in action: reading `]` at index 2, the stack top holds the most recent unmatched open `[` — they match, so it pops. The `(` below keeps waiting for its own partner.",
+      "svg": "<svg viewBox=\"0 0 660 230\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Plain stack matching a close bracket to the most recent open bracket\"><text x=\"20\" y=\"24\" class=\"t-bold\">read s[2] = ']' — it must match the stack top</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">(</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">[</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">]</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">)</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">{</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><line x1=\"140\" y1=\"116\" x2=\"98\" y2=\"146\" class=\"s-ok\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-ok)\"/><rect x=\"20\" y=\"152\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"42\" y=\"180\" text-anchor=\"middle\" class=\"t-mono\">(</text><rect x=\"66\" y=\"152\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/><text x=\"88\" y=\"180\" text-anchor=\"middle\" class=\"t-mono t-ok\">[</text><text x=\"124\" y=\"180\" class=\"t-sm t-ok\">← top matches ']' → pop</text><text x=\"20\" y=\"220\" class=\"t-sm t-muted\">stack (bottom → top): opens still waiting</text></svg>"
+    },
+    "m03-nge-pop": {
+      "caption": "The pop moment in **Next Greater Element** on `[2,1,5,6,2,3]`: value 5 at index 2 resolves both waiting indices — it is *their* answer — then joins the stack to wait for its own.",
+      "svg": "<svg viewBox=\"0 0 660 280\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Monotonic stack pop moment while scanning for next greater elements\"><text x=\"20\" y=\"24\" class=\"t-bold\">nums = [2,1,5,6,2,3] — the moment i = 2 (value 5) arrives</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-warn-soft s-line\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-warn-soft s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">1</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">5</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">6</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">2</text><rect x=\"250\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"272\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"272\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><line x1=\"134\" y1=\"146\" x2=\"134\" y2=\"118\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/><text x=\"134\" y=\"168\" text-anchor=\"middle\" class=\"t-sm t-accent\">cur = 5</text><text x=\"20\" y=\"200\" class=\"t-sm\">stack held indices [0, 1] — values 2, 1 (decreasing), both still waiting</text><text x=\"20\" y=\"230\" class=\"t-sm t-ok\">5 &gt; 1 → pop 1, ans[1] = 5 · then 5 &gt; 2 → pop 0, ans[0] = 5</text><text x=\"20\" y=\"260\" class=\"t-sm t-muted\">push 2 — index 2 now waits for its own next greater (it will be 6)</text></svg>"
+    },
+    "m03-histogram-cap": {
+      "caption": "Largest Rectangle on `h = [2,1,5,6,2,3]`: when the current bar `h=2` breaks the increasing order, bar 2 (`h=5`) pops — the pop instantly reveals its right bound (`i=4`) and left bound (new top, index 1), fixing the dashed rectangle of area 10.",
+      "svg": "<svg viewBox=\"0 0 660 310\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Histogram bars with the popped bar's maximal rectangle between its smaller neighbors\"><text x=\"20\" y=\"24\" class=\"t-bold\">h = [2,1,5,6,2,3] — i = 4 (h=2) pops bar 3, then bar 2</text><rect x=\"20\" y=\"200\" width=\"44\" height=\"60\" class=\"f-panel s-line\"/><rect x=\"66\" y=\"230\" width=\"44\" height=\"30\" class=\"f-panel s-line\"/><rect x=\"112\" y=\"110\" width=\"44\" height=\"150\" class=\"f-accent-soft s-accent\"/><rect x=\"158\" y=\"80\" width=\"44\" height=\"180\" class=\"f-panel s-muted o-60\"/><rect x=\"204\" y=\"200\" width=\"44\" height=\"60\" class=\"f-bad-soft s-bad\"/><rect x=\"250\" y=\"170\" width=\"44\" height=\"90\" class=\"f-panel s-line\"/><text x=\"42\" y=\"192\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"88\" y=\"222\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"102\" text-anchor=\"middle\" class=\"t-sm t-accent\">5</text><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text><text x=\"226\" y=\"192\" text-anchor=\"middle\" class=\"t-sm t-bad\">2</text><text x=\"272\" y=\"162\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><rect x=\"112\" y=\"110\" width=\"90\" height=\"150\" class=\"f-none s-ok\" stroke-width=\"2\" stroke-dasharray=\"6 4\"/><line x1=\"20\" y1=\"260\" x2=\"300\" y2=\"260\" class=\"s-line\"/><text x=\"42\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><text x=\"272\" y=\"284\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text><line x1=\"226\" y1=\"164\" x2=\"226\" y2=\"192\" class=\"s-bad\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-bad)\"/><text x=\"226\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-bad\">cur</text><text x=\"360\" y=\"110\" class=\"t-bold\">pop bar 2 (h = 5):</text><text x=\"360\" y=\"140\" class=\"t-sm\">right bound = i = 4</text><text x=\"360\" y=\"170\" class=\"t-sm\">left bound = new top = 1</text><text x=\"360\" y=\"200\" class=\"t-sm\">width = 4 − 1 − 1 = 2</text><text x=\"360\" y=\"230\" class=\"t-sm t-ok\">area = 5 × 2 = 10 → best</text><text x=\"360\" y=\"260\" class=\"t-sm t-muted\">(bar 3, h=6, already popped: area 6)</text></svg>"
+    },
+    "m03-water-slab": {
+      "caption": "Trapping Rain Water fills **horizontal slabs**: when `h=4` arrives it pops the floor (`h=1`); the new top (`h=3`) is the left wall, the current bar is the right wall, and the shaded slab of water is measured in one pop.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Water slab bounded by a left wall, a popped floor, and the current bar as right wall\"><text x=\"20\" y=\"24\" class=\"t-bold\">h = [3,1,4] — i = 2 (h=4) arrives and pops the floor</text><rect x=\"20\" y=\"130\" width=\"44\" height=\"120\" class=\"f-panel s-line\"/><rect x=\"66\" y=\"210\" width=\"44\" height=\"40\" class=\"f-panel s-line\"/><rect x=\"112\" y=\"90\" width=\"44\" height=\"160\" class=\"f-accent-soft s-accent\"/><rect x=\"66\" y=\"130\" width=\"44\" height=\"80\" class=\"f-accent2 o-35 s-accent2\"/><text x=\"42\" y=\"122\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"88\" y=\"202\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"82\" text-anchor=\"middle\" class=\"t-sm t-accent\">4</text><line x1=\"20\" y1=\"250\" x2=\"160\" y2=\"250\" class=\"s-line\"/><text x=\"42\" y=\"274\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"274\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"274\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"230\" y=\"120\" class=\"t-sm\">pop floor = index 1 (h = 1)</text><text x=\"230\" y=\"150\" class=\"t-sm\">left wall = new top = index 0 (h = 3)</text><line x1=\"224\" y1=\"172\" x2=\"116\" y2=\"172\" class=\"s-accent2\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent2)\"/><text x=\"230\" y=\"177\" class=\"t-sm t-accent2\">bounded = min(3, 4) − 1 = 2</text><text x=\"230\" y=\"208\" class=\"t-sm\">width = 2 − 0 − 1 = 1</text><text x=\"230\" y=\"238\" class=\"t-sm t-ok\">water += 2 × 1 = 2</text></svg>"
+    },
+    "m03-contribution-span": {
+      "caption": "The contribution trick on `a = [1,3,2,4,2]`: `a[2] = 2` is the minimum only inside the span between its **previous strictly-smaller** (index 0) and **next smaller-or-equal** (index 4) — 2 possible starts × 2 possible ends = 4 subarrays, contributing 8.",
+      "svg": "<svg viewBox=\"0 0 660 300\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Spans of subarrays in which one element is the minimum, bounded by smaller neighbors\"><text x=\"20\" y=\"24\" class=\"t-bold\">a = [1,3,2,4,2] — where is a[2] = 2 the minimum?</text><rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">1</text><rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text><rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/><text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text><rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/><text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">4</text><rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/><text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">2</text><text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text><text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text><text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text><text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text><text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text><line x1=\"68\" y1=\"142\" x2=\"154\" y2=\"142\" class=\"s-accent\" stroke-width=\"3\"/><text x=\"111\" y=\"166\" text-anchor=\"middle\" class=\"t-sm t-accent\">2 possible starts (idx 1 or 2)</text><line x1=\"114\" y1=\"192\" x2=\"200\" y2=\"192\" class=\"s-accent2\" stroke-width=\"3\"/><text x=\"157\" y=\"216\" text-anchor=\"middle\" class=\"t-sm t-accent2\">2 possible ends (idx 2 or 3)</text><text x=\"20\" y=\"248\" class=\"t-sm\">a[2] is the min of 2 × 2 = 4 subarrays → it contributes 2 × 4 = 8</text><text x=\"20\" y=\"278\" class=\"t-sm t-muted\">strict &lt; on the left, ≤ on the right: the duplicate 2 at index 4 owns its own ties</text></svg>"
+    }
+  }
+}

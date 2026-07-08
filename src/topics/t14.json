@@ -1,0 +1,267 @@
+{
+  "tag": "m14",
+  "week": "Week 8 · Module 14",
+  "title": "Greedy & Intervals",
+  "priority": "attack",
+  "summary": "Flipkart-style OAs lean *hard* on greedy, and it's your fastest topic to sharpen: you already have CP instinct for sorting and local choices. This module locks in the three interval templates (merge, schedule, reach) and — the part that actually wins interviews — the one-sentence **exchange argument** that tells you a greedy is correct *before* you ship it.",
+  "notes": [
+    {
+      "heading": "How to smell a greedy problem",
+      "body": "Greedy problems rarely announce themselves — you have to recognize the tells:\n\n- The verb is **maximize / minimize / fewest / most**, and a locally best choice (earliest finish, largest bill, cheapest now) plausibly stacks up into a global optimum.\n- The input is — or can be — **sorted**, then handled in one pass: \"schedule these\", \"select the most\", \"minimum number of X to cover Y\".\n- **Intervals** appear: `[start, end]` pairs, meetings, merges, overlaps, coverage.\n- Every decision is **irreversible**: you commit, move forward, and never need to undo.\n\nYou already have the CP instinct for local choices and sorting. What this module adds is the *interval* pattern vocabulary, and — more importantly — the discipline to tell a correct greedy from a plausible-but-wrong one when the clock is running.\n\n> [!WARNING] The \"it's actually DP\" alarm\n> If the best choice *now* depends on choices you haven't made yet, or there are **two resource dimensions** at once (weight *and* value — that's 0/1 knapsack), greedy is a trap. Spend 30 seconds hunting for a small counterexample. If you find even one, switch to DP without regret.\n\n> [!KEY]\n> A greedy solution is three things: the **sort key**, the **one value you carry** across the scan, and a **one-sentence proof**. If you can't name all three, you don't have a greedy yet — you have a hope."
+    },
+    {
+      "heading": "The exchange argument — your one-sentence proof",
+      "body": "Here is the tool that separates a defensible greedy from a guess. To show greedy = optimal, you argue: *take any optimal solution; if its choice differs from mine, I can **swap** my greedy choice in without making it worse.* Repeat the swap step by step and the greedy is at least as good as the optimal — so it **is** optimal.\n\n> [!ANALOGY]\n> Think of booking back-to-back sessions in a shared room. If someone claims a \"better\" schedule that doesn't start with the earliest-finishing booking, hand them yours instead: it frees the room *sooner*, so everything in their schedule still fits. Their plan was never better — at best it tied.\n\nIn an interview you don't write this out as a formal induction. You **say the swap in one sentence**:\n\n> [!KEY] The sentence to say out loud\n> \"If the optimal solution didn't pick the earliest-finishing interval, I can replace its first pick with mine and free up at least as much room — so my pick is never worse.\"\n\nThat single sentence is what makes an interviewer trust your greedy. It also protects *you*: if you try to state the swap and can't — if swapping your choice in could genuinely hurt later options — that's your signal the problem isn't greedy at all.\n\n> [!EXAM]\n> In a timed OA nobody reads your proof, but the exchange argument is still your *correctness check*. Before coding, spend 20 seconds trying to break your own greedy with a 3-element counterexample. Wrong-greedy submissions are the most expensive mistake in a 90-minute, 3-hard format."
+    },
+    {
+      "heading": "Template 1 — Merge intervals: sort by START, extend the end",
+      "body": "The canonical interval greedy. Once intervals are sorted by start, any overlap must involve the **most recently placed** interval in the result — so you only ever compare against `res.back()`.\n\n[[fig:m14-merge-timeline]]\n\n```cpp\n// Merge overlapping intervals. Canonical interval greedy.\nvector<vector<int>> merge(vector<vector<int>>& iv) {\n    sort(iv.begin(), iv.end());          // sort by START\n    vector<vector<int>> res;\n    for (auto& x : iv) {\n        // If res empty OR current start is beyond last end -> no overlap, push new.\n        if (res.empty() || x[0] > res.back()[1]) {\n            res.push_back(x);\n        } else {\n            // Overlap: extend the last interval's end to the max.\n            res.back()[1] = max(res.back()[1], x[1]);\n        }\n    }\n    return res;\n}\n```\n\nThe carried value here is `res.back()[1]` — the end of the interval you're currently growing. Each new interval either overlaps it (extend the end with `max`) or starts a fresh one.\n\n> [!EXAMPLE]\n> `[[1,4],[3,6],[8,10]]` (already sorted). Take `[1,4]`. Next `[3,6]`: is `3 > 4`? No — overlap, extend end to `max(4,6) = 6`, giving `[1,6]`. Next `[8,10]`: is `8 > 6`? Yes — push new. Result: `[[1,6],[8,10]]`.\n\n> [!PITFALL]\n> Why `max(res.back()[1], x[1])` and not just `x[1]`? Because a later interval can be *nested*: after `[1,10]`, the interval `[2,3]` overlaps but must **not** shrink your end to 3. Forgetting the `max` is the classic merge bug.\n\n> [!PITFALL]\n> Guard the empty case: `res.empty() ||` must come first in the condition, or `res.back()` on an empty vector is undefined behavior. And if the input itself can be empty, returning the empty list is the sane base case."
+    },
+    {
+      "heading": "Template 2 — Interval scheduling: sort by END",
+      "body": "Different question, different sort key. Now you want the **maximum number of non-overlapping intervals** (equivalently: minimum removals, or fewest arrows to hit every balloon). The winning move: sort by **end time** and always take the interval that finishes earliest among those still compatible.\n\n[[fig:m14-sort-by-end]]\n\n```cpp\n// Pick the MOST non-overlapping intervals. Key: sort by END, not start.\nint maxNonOverlap(vector<vector<int>>& iv) {\n    sort(iv.begin(), iv.end(),\n         [](auto& a, auto& b){ return a[1] < b[1]; }); // earliest finish first\n    int count = 0, lastEnd = INT_MIN;\n    for (auto& x : iv) {\n        if (x[0] >= lastEnd) {   // starts after (or when) last chosen ends\n            count++;\n            lastEnd = x[1];      // commit to this interval\n        }\n    }\n    return count;               // removals = total - count\n}\n```\n\nWhy end and not start? Finishing earliest **leaves the most room** for everything after it — that's the exchange argument made physical. Sorting by start fails hard: a long early interval hogs the timeline and blocks several short ones you should have kept.\n\n> [!KEY]\n> Two questions, two sort keys. **Merging** intervals → sort by *start* (overlaps must be adjacent). **Selecting the most** intervals → sort by *end* (earliest finish frees the most room). Say the key out loud before you type a character.\n\n> [!EXAM]\n> Three OA problems are this exact template wearing costumes: *Non-overlapping Intervals* asks for `n - count` (removals), *Arrows* asks how many committed ends you needed (touching counts as overlap — use strict `>`), and *max meetings you can attend* asks for `count` itself. Recognize the costume, reuse the scan."
+    },
+    {
+      "heading": "Template 3 — Reachability greedy: carry the farthest",
+      "body": "The jump-game family. No sorting here — the array order *is* the timeline. The carried value is `farthest`: the rightmost index you could possibly reach with everything seen so far.\n\n```cpp\n// Can you reach the last index? Track the FARTHEST reachable so far.\nbool canJump(vector<int>& nums) {\n    int farthest = 0;\n    for (int i = 0; i < nums.size(); i++) {\n        if (i > farthest) return false;          // stuck: can't even reach i\n        farthest = max(farthest, i + nums[i]);   // greedily extend reach\n    }\n    return true;\n}\n```\n\nTwo things make this correct:\n\n1. **If `i > farthest`, you're stranded.** Index `i` is beyond everything reachable, and it can never improve — no future cell helps because you can't get to any future cell.\n2. **`farthest` only needs one value.** You don't care *which* index gets you far, only how far you can get. Collapsing \"the set of reachable indices\" into a single frontier number is what makes this $O(n)$ instead of a graph search.\n\n[[fig:m14-jump-levels]]\n\nThe follow-up, *minimum* number of jumps, keeps the same `farthest` idea but adds level boundaries — it's a BFS where you never build the queue (full walkthrough in the deep dives).\n\n> [!INTUITION]\n> Picture a wave front sweeping right. Each index you visit pushes the frontier out by `i + nums[i]`. You only fail if the scan pointer catches up to a frozen frontier.\n\n> [!PITFALL]\n> On adversarial constraints, `i + nums[i]` (and gas-station sums) can overflow `int`. Your CP habit of reaching for `long long` when values approach $10^9$ is correct — keep it."
+    },
+    {
+      "heading": "Pitfalls, boundaries, and how to narrate it",
+      "body": "The bugs in this module are all *boundary* bugs — the algorithms are short, so precision is everything.\n\n| Bug | Fix |\n|---|---|\n| Wrong sort key | Merge → **start**; max non-overlapping / arrows → **end**. #1 error in this topic. |\n| `>` vs `>=` on touching endpoints | `[1,2]` and `[2,3]`: for scheduling they're usually compatible (`>=` keeps both); for arrows touching **does** overlap (use strict `>`). Read the problem's examples — never assume. |\n| Bad init | `lastEnd = INT_MIN` (or `LLONG_MIN` for large coordinates) so the first interval is always taken. |\n| Jump Game II off-by-one | Loop `i + 1 < nums.size()` — never count a jump *from* the last index. |\n| Empty input | Return the sane base case (`0` rooms, empty list) before touching `res.back()`. |\n\n> [!PITFALL] The greedy-vs-DP litmus test\n> Coin change with coins `{1,3,4}` making 6: largest-first greedy gives `4+1+1` = 3 coins, but `3+3` = 2 is optimal. 0/1 knapsack by value/weight ratio fails the same way. If a 30-second counterexample exists, it *will* be in the hidden tests — abandon greedy and go DP.\n\n> [!EXAM] Interview narration, every single time\n> 1. Restate the pattern: \"this is interval scheduling / a reachability greedy.\"\n> 2. Name the sort key and the carried value: \"sort by end, track the last chosen end.\"\n> 3. Say the one-sentence exchange argument.\n> 4. Mention the $O(n \\log n)$ sort cost, then code.\n> 5. If unsure, say \"let me sanity-check with a counterexample\" and try `[0,10],[1,2],[3,4]` out loud — that's a strong signal, not a weak one."
+    }
+  ],
+  "problems": [
+    {
+      "name": "Best Time to Buy and Sell Stock",
+      "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "One pass: track the running minimum price, greedily update best profit."
+    },
+    {
+      "name": "Assign Cookies",
+      "url": "https://leetcode.com/problems/assign-cookies/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Sort both arrays, two-pointer greedy matching — the textbook exchange argument."
+    },
+    {
+      "name": "Lemonade Change",
+      "url": "https://leetcode.com/problems/lemonade-change/",
+      "difficulty": "Easy",
+      "oa": false,
+      "note": "Always give change with the largest bills first; just count your 5s and 10s."
+    },
+    {
+      "name": "Jump Game",
+      "url": "https://leetcode.com/problems/jump-game/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Carry one value — `farthest` reachable; if `i` ever passes it, you're stuck."
+    },
+    {
+      "name": "Jump Game II",
+      "url": "https://leetcode.com/problems/jump-game-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Minimum jumps = BFS-like level greedy; bump `jumps` when `i` hits `curEnd`."
+    },
+    {
+      "name": "Merge Intervals",
+      "url": "https://leetcode.com/problems/merge-intervals/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Sort by **start**, then either extend `res.back()[1]` with `max` or push new."
+    },
+    {
+      "name": "Insert Interval",
+      "url": "https://leetcode.com/problems/insert-interval/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Three-phase scan: copy the befores, merge everything overlapping, copy the afters."
+    },
+    {
+      "name": "Non-overlapping Intervals",
+      "url": "https://leetcode.com/problems/non-overlapping-intervals/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Interval scheduling: sort by **end**, count keepers; answer = n − kept."
+    },
+    {
+      "name": "Minimum Number of Arrows to Burst Balloons",
+      "url": "https://leetcode.com/problems/minimum-number-of-arrows-to-burst-balloons/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "Sort by end, shoot at each earliest end — touching counts as overlap, so use strict `>`."
+    },
+    {
+      "name": "Meeting Rooms II",
+      "url": "https://leetcode.com/problems/meeting-rooms-ii/",
+      "difficulty": "Medium",
+      "oa": true,
+      "note": "**Premium** — max concurrent intervals via min-heap of ends or a +1/−1 sweep; free on LintCode 919 / NeetCode."
+    },
+    {
+      "name": "Partition Labels",
+      "url": "https://leetcode.com/problems/partition-labels/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Precompute each char's last occurrence; greedily extend the window to the max last-index seen."
+    },
+    {
+      "name": "Gas Station",
+      "url": "https://leetcode.com/problems/gas-station/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Single pass: running `tank` picks the start, running `total` decides feasibility."
+    },
+    {
+      "name": "Task Scheduler",
+      "url": "https://leetcode.com/problems/task-scheduler/",
+      "difficulty": "Medium",
+      "oa": false,
+      "note": "Greedy on the most-frequent task; idle-slot formula `(maxFreq−1)·(n+1)+countOfMax` vs just `tasks`."
+    },
+    {
+      "name": "Candy",
+      "url": "https://leetcode.com/problems/candy/",
+      "difficulty": "Hard",
+      "oa": false,
+      "note": "Two greedy passes: left→right handles rising neighbors, right→left handles falling."
+    }
+  ],
+  "deepdives": [
+    {
+      "q": "**Interval scheduling: why END, not start** — given intervals, keep the maximum number that don't overlap (equivalently: remove the fewest, or shoot the fewest arrows to burst every balloon). Which sort key makes the greedy correct, and how do you prove it?",
+      "url": "https://leetcode.com/problems/non-overlapping-intervals/",
+      "tag": "sort-by-end",
+      "answer": "**Why the tempting greedy fails.** \"Sort by start, keep picking\" dies on `[0,10], [1,2], [3,4]`: sorting by start picks `[0,10]` first, it hogs the whole line, and you keep 1 interval when you could keep 2.\n\n[[fig:m14-sort-by-end]]\n\nThe other tempting fix, \"sort by shortest length,\" also fails: on chains like `[1,3],[2,4],[3,5]`, a length-based pick can conflict with *two* neighbors at once. Length simply isn't the invariant that matters.\n\n> [!INTUITION] The trick\n> Sort by **END time** and always take the interval that finishes earliest among those still compatible. Finishing earliest **leaves the most room** for everything after it — that's the exchange argument made physical.\n\n```cpp\nsort(iv.begin(), iv.end(), [](auto&a, auto&b){ return a[1] < b[1]; });\nint kept = 0, lastEnd = INT_MIN;\nfor (auto& x : iv) {\n    if (x[0] >= lastEnd) { kept++; lastEnd = x[1]; } // compatible -> take it\n}\n// Non-overlapping Intervals answer = n - kept  (min removals)\n```\n\n**The exchange-argument proof (say this out loud).** Let the greedy's first pick be *g*, the globally earliest end. Take any optimal solution; its first pick *o* ends no earlier than *g*. Swap *o* out for *g*: the solution stays valid — *g* ends earlier, so it can't conflict with anything *o* didn't already conflict with — and the count is unchanged. Induct on the rest, and the greedy is optimal.\n\n**Arrows is the identical problem in costume.** \"Burst all balloons with the fewest arrows\" = \"how few points hit all intervals\". Sort by end; shoot at each interval's end; skip every balloon that arrow already covers. One boundary flip: for arrows, *touching endpoints count as overlapping*, so the compatibility test uses strict `>` instead of `>=`.\n\n**Complexity:** $O(n \\log n)$ for the sort plus an $O(n)$ scan; $O(1)$ extra space (or $O(\\log n)$ for the sort).\n\n**What generalizes:** any \"select the most non-conflicting things\" question — meetings, courses, ads — is this template. Your only real decisions are the sort key and the boundary comparison."
+    },
+    {
+      "q": "**Meeting Rooms II** — given meeting time intervals, find the *minimum number of conference rooms* required (i.e., the maximum number of meetings alive at any instant).",
+      "url": "https://leetcode.com/problems/meeting-rooms-ii/",
+      "tag": "sweep-line",
+      "answer": "**Why one `lastEnd` isn't enough.** Unlike scheduling, several meetings can be simultaneously live, and a room frees up only when *its own* meeting ends. At each new start you need to know whether **any** room has freed — that's a set of end times, not a single value.\n\n**Trick A — min-heap of end times.** Sort by start. The heap holds the end times of currently occupied rooms; the top is always the room that frees *soonest*. For each meeting: if the top is ≤ this start, pop (reuse that room); then push this meeting's end. The final heap size is the answer, because you only ever grew the heap when no room was free.\n\n```cpp\nint minMeetingRooms(vector<vector<int>>& m) {\n    sort(m.begin(), m.end());                 // by start\n    priority_queue<int, vector<int>, greater<int>> pq; // min-heap of end times\n    for (auto& x : m) {\n        if (!pq.empty() && pq.top() <= x[0]) pq.pop(); // a room freed up\n        pq.push(x[1]);\n    }\n    return pq.size();\n}\n```\n\n> [!NOTE]\n> This is deliberately also your **heaps rep** — `priority_queue` with `greater<int>` is a gap for you, and this is the cleanest place to make it muscle memory: min-heap = \"give me the room that frees first.\"\n\n**Trick B — sweep line / event counting (slicker, right in your prefix-sum wheelhouse).** Forget assigning rooms entirely. Every meeting is two events: `+1` at its start, `−1` at its end. Sort the starts and ends separately and sweep: before admitting each start, retire every end that's ≤ it; the peak of the running counter is the answer.\n\n[[fig:m14-sweep-line]]\n\n```cpp\nint minMeetingRooms(vector<vector<int>>& m) {\n    vector<int> starts, ends;\n    for (auto& x : m){ starts.push_back(x[0]); ends.push_back(x[1]); }\n    sort(starts.begin(), starts.end());\n    sort(ends.begin(), ends.end());\n    int rooms = 0, best = 0, j = 0;\n    for (int i = 0; i < starts.size(); i++) {\n        while (j < ends.size() && ends[j] <= starts[i]) { rooms--; j++; }\n        rooms++;\n        best = max(best, rooms);\n    }\n    return best;\n}\n```\n\nNote `ends[j] <= starts[i]`: a meeting ending exactly when another begins hands over its room (typical for this problem — but confirm against the examples).\n\n**Complexity:** both tricks are $O(n \\log n)$ time, $O(n)$ space.\n\n**What generalizes:** \"max concurrent anything\" — CPU jobs, bandwidth, platform trains — is the same +1/−1 sweep. It's a prefix-sum over events, which is exactly the CP tool you already own."
+    },
+    {
+      "q": "**Jump Game II** — `nums[i]` is the maximum jump length from index `i`. Return the *minimum number of jumps* to reach the last index, in better than $O(n^2)$.",
+      "url": "https://leetcode.com/problems/jump-game-ii/",
+      "tag": "implicit-bfs",
+      "answer": "**Why naive fails.** The obvious DP — `dp[i]` = min jumps to reach `i`, relaxing every predecessor — is $O(n^2)$ and TLEs on big OA inputs. The greedy is $O(n)$, and the way to *see* it is as a BFS you never build.\n\n> [!INTUITION] Levels without a queue\n> Everything reachable in 1 jump is \"level 1\", in 2 jumps \"level 2\", and so on. The current level is just a window `[.. curEnd]`. While scanning it you compute `farthest` — the boundary of the *next* level. When `i` hits `curEnd`, the level is exhausted: increment `jumps`, slide the boundary to `farthest`.\n\n[[fig:m14-jump-levels]]\n\n```cpp\nint jump(vector<int>& nums) {\n    int jumps = 0, curEnd = 0, farthest = 0;\n    for (int i = 0; i + 1 < nums.size(); i++) {  // no need to jump FROM the last index\n        farthest = max(farthest, i + nums[i]);   // best reach discovered this level\n        if (i == curEnd) {                       // exhausted current jump's range\n            jumps++;\n            curEnd = farthest;                   // next level's right boundary\n        }\n    }\n    return jumps;\n}\n```\n\n**Trace on `[2,3,1,1,4]`:** `i=0`: farthest = 2; `i == curEnd(0)` → jumps = 1, curEnd = 2. `i=1`: farthest = max(2, 4) = 4. `i=2`: `i == curEnd` → jumps = 2, curEnd = 4. Loop ends before the last index. Answer **2** — exactly the two BFS levels in the figure.\n\n> [!PITFALL]\n> The `i + 1 < nums.size()` guard is the whole correctness subtlety: if you loop to the last index, landing exactly on it triggers one final `i == curEnd` and you over-count by one jump. You never need to jump *from* the destination.\n\n**Complexity:** $O(n)$ time, $O(1)$ space.\n\n**What generalizes:** whenever \"minimum steps\" lives on a line and each position reaches a contiguous range, you can run BFS with two integers (`curEnd`, `farthest`) instead of a queue. That reframing — *greedy as compressed BFS* — is worth remembering on its own."
+    },
+    {
+      "q": "**Gas Station** — a circular route with `gas[i]` available at station `i` and `cost[i]` to reach the next station. Return the unique starting index from which you can complete a full loop, or `-1`, in one pass.",
+      "url": "https://leetcode.com/problems/gas-station/",
+      "tag": "one-pass-lemma",
+      "answer": "**Why naive fails.** Simulating the loop from every start is $O(n^2)$. The one-pass greedy rests on two lemmas that are genuinely non-obvious — this is a *prove it or don't trust it* problem.\n\n**Lemma 1 (feasibility).** If total gas < total cost, no start works — return `-1`. (Fuel is conserved; the loop's net balance doesn't depend on where you start.)\n\n**Lemma 2 (the jump).** If a solution exists, then whenever the running tank goes negative arriving at station `i`, **no station in `start..i` can be the answer** — the next candidate is `i+1`.\n\n> [!INTUITION] Why lemma 2 holds\n> You arrived at every intermediate station `k` in `start..i` with tank ≥ 0. Starting *at* `k` instead means arriving at `i` with that cushion removed — even less fuel. If the trip failed with a head start, it fails without one. So the entire failed prefix is disqualified at once, and the scan never re-visits it — that's what makes one pass enough.\n\n[[fig:m14-gas-tank]]\n\n```cpp\nint canCompleteCircuit(vector<int>& gas, vector<int>& cost) {\n    int total = 0, tank = 0, start = 0;\n    for (int i = 0; i < gas.size(); i++) {\n        int diff = gas[i] - cost[i];\n        total += diff;\n        tank  += diff;\n        if (tank < 0) { start = i + 1; tank = 0; } // can't start in [old start..i]\n    }\n    return total >= 0 ? start : -1;\n}\n```\n\n**Trace (`diff = [-2,-2,-2,+3,+3]`):** tank goes negative at stations 0, 1, 2 — each failure jumps `start` forward. From `start = 3` the tank stays ≥ 0, and `total = 0 ≥ 0` confirms feasibility, so the answer is 3.\n\nThe elegance: **one pass computes both** the feasibility check (`total`) and the answer (`start`). Note `start` is never wrapped around — lemma 1 guarantees that if `total ≥ 0`, the final candidate survives the wrap.\n\n**Complexity:** $O(n)$ time, $O(1)$ space. Use `long long` for the sums if constraints are large.\n\n**What generalizes:** the \"failed prefix disqualifies every start inside it\" argument reappears in maximum-subarray-flavored problems (it's Kadane's reset in disguise) — when a running sum going negative kills all prefixes, reset and move on."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "An OA asks: *\"Given `n` meetings, attend the maximum possible number (one at a time).\"* What do you sort by, and what single value do you carry across the scan?",
+      "options": [
+        "Sort by start time; track the earliest start seen so far",
+        "Sort by end time; track the end of the last meeting you committed to",
+        "Sort by duration (shortest first); track total time used",
+        "Sort by start time; track a min-heap of end times"
+      ],
+      "answer": 1,
+      "explanation": "This is interval scheduling: earliest finish leaves the most room, so sort by **end** and keep `lastEnd`. Option D is the *Meeting Rooms II* setup — a heap of ends counts max *concurrent* meetings (rooms), which is a different question. Sorting by start or duration both have easy 3-interval counterexamples.",
+      "tag": "sort-key"
+    },
+    {
+      "q": "In the `maxNonOverlap` template you change `if (x[0] >= lastEnd)` to `if (x[0] > lastEnd)`. What actually changes?",
+      "options": [
+        "Nothing — the two are equivalent because the intervals are sorted",
+        "The first interval is never taken, so the count is always off by one",
+        "Intervals that merely *touch* (one ends exactly where the next starts) now count as overlapping, so you may keep fewer intervals",
+        "The loop can read past the end of the array"
+      ],
+      "answer": 2,
+      "explanation": "With `>=`, `[1,2]` and `[2,3]` are compatible; with `>`, a start equal to `lastEnd` is rejected. The first interval is still taken either way (any start beats `INT_MIN`). This boundary flip is exactly the scheduling-vs-arrows distinction — for arrows, touching *does* overlap, so there you *want* the strict `>`.",
+      "tag": "boundary"
+    },
+    {
+      "q": "For the min-heap version of Meeting Rooms II on `n` meetings, what are the time and extra-space complexities?",
+      "options": [
+        "$O(n \\log n)$ time, $O(n)$ space",
+        "$O(n)$ time, $O(1)$ space",
+        "$O(n^2)$ time, $O(n)$ space",
+        "$O(n \\log n)$ time, $O(1)$ space"
+      ],
+      "answer": 0,
+      "explanation": "Sorting costs $O(n \\log n)$, and each meeting does at most one push and one pop at $O(\\log n)$ each. The heap can hold up to $n$ end times when everything overlaps, so extra space is $O(n)$ — which rules out option D. There's no $O(n)$-time solution because sorting is required.",
+      "tag": "complexity"
+    },
+    {
+      "q": "Trace the Jump Game II greedy on `nums = [2,3,1,1,4]`. What does it return?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answer": 1,
+      "explanation": "`i=0`: farthest = 2, `i == curEnd(0)` → jumps = 1, curEnd = 2. `i=1`: farthest = max(2, 1+3) = 4. `i=2`: `i == curEnd` → jumps = 2, curEnd = 4. The loop stops before the last index (the `i + 1 < n` guard), so the answer is **2**: jump 0→1, then 1→4. If you'd looped through the last index, you'd have wrongly counted a third jump.",
+      "tag": "trace"
+    },
+    {
+      "q": "Coins `{1,3,4}`, target 6. The largest-coin-first greedy produces `4+1+1` (3 coins). What's the correct takeaway?",
+      "options": [
+        "The greedy is correct — 3 coins is optimal for 6",
+        "The greedy fails only because the coins weren't sorted ascending",
+        "Running the greedy from the smallest coin instead fixes it",
+        "The greedy is wrong (`3+3` uses 2 coins) — coin change with arbitrary denominations needs DP"
+      ],
+      "answer": 3,
+      "explanation": "`3+3 = 6` with 2 coins beats the greedy's 3. The best choice *now* (take a 4) depends on what remains makeable *later* — the tell that this is DP territory. Sorting direction doesn't rescue it in either direction. Greedy on coins only works for special systems like `{1,5,10,25}`; hidden tests will find the counterexample if you gamble.",
+      "tag": "greedy-vs-dp"
+    },
+    {
+      "q": "In Gas Station, your tank goes negative arriving at station `i` after starting at `s`. Why may the next candidate start jump straight to `i+1`?",
+      "options": [
+        "Every station in `s..i` was reached with tank ≥ 0, so starting there means arriving at `i` with even less fuel — they all fail too",
+        "Because the tank going negative proves total gas < total cost, so the answer is -1",
+        "Because the answer is always the station with the maximum `gas[i] − cost[i]`",
+        "It may not — each start in `s..i` must be tested separately, which is why the algorithm is O(n²)"
+      ],
+      "answer": 0,
+      "explanation": "That's Lemma 2: starting at any intermediate station `k` only *removes* the non-negative cushion you had when you passed `k`, so the trip fails at `i` again. This disqualifies the whole prefix at once, making one pass suffice — the algorithm is $O(n)$, not $O(n^2)$. A negative tank says nothing about the *total*; that's a separate check at the end.",
+      "tag": "proof"
+    },
+    {
+      "q": "You run the merge-intervals template but **forget to sort** first, on `[[1,4],[0,2],[3,5]]`. What does it return?",
+      "options": [
+        "`[[0,5]]`",
+        "`[[1,4],[0,2],[3,5]]`",
+        "`[[1,5]]`",
+        "`[[0,4],[3,5]]`"
+      ],
+      "answer": 2,
+      "explanation": "Take `[1,4]`. Then `[0,2]`: `0 > 4` is false → \"overlap\", end = max(4,2) = 4, still `[1,4]`. Then `[3,5]`: `3 > 4` is false → end = max(4,5) = 5, giving `[[1,5]]` — which silently loses coverage of `[0,1)`. The correct answer after sorting is `[[0,5]]`. The template's whole invariant — overlaps only ever touch `res.back()` — exists *because* of the sort.",
+      "tag": "template-bug"
+    }
+  ],
+  "figures": {
+    "m14-merge-timeline": {
+      "caption": "Merging `[[1,4],[3,6],[8,10]]`: sorted by start, `[3,6]` overlaps the growing interval so its end extends to 6; `[8,10]` starts past 6 so it begins a new one.",
+      "svg": "<svg viewBox=\"0 0 660 240\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Merging overlapping intervals on a number line\">\n  <text x=\"20\" y=\"24\" class=\"t-bold\">merge: sort by start, extend the last end</text>\n  <rect x=\"90\" y=\"46\" width=\"180\" height=\"20\" class=\"f-accent-soft s-accent\"/>\n  <text x=\"180\" y=\"60\" text-anchor=\"middle\" class=\"t-sm t-accent\">[1,4]</text>\n  <rect x=\"210\" y=\"78\" width=\"180\" height=\"20\" class=\"f-accent-soft s-accent\"/>\n  <text x=\"300\" y=\"92\" text-anchor=\"middle\" class=\"t-sm t-accent\">[3,6]</text>\n  <rect x=\"510\" y=\"46\" width=\"120\" height=\"20\" class=\"f-panel s-line\"/>\n  <text x=\"570\" y=\"60\" text-anchor=\"middle\" class=\"t-sm\">[8,10]</text>\n  <line x1=\"30\" y1=\"128\" x2=\"640\" y2=\"128\" class=\"s-muted\"/>\n  <line x1=\"30\" y1=\"124\" x2=\"30\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"90\" y1=\"124\" x2=\"90\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"150\" y1=\"124\" x2=\"150\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"210\" y1=\"124\" x2=\"210\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"270\" y1=\"124\" x2=\"270\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"330\" y1=\"124\" x2=\"330\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"390\" y1=\"124\" x2=\"390\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"450\" y1=\"124\" x2=\"450\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"510\" y1=\"124\" x2=\"510\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"570\" y1=\"124\" x2=\"570\" y2=\"132\" class=\"s-muted\"/>\n  <line x1=\"630\" y1=\"124\" x2=\"630\" y2=\"132\" class=\"s-muted\"/>\n  <text x=\"30\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text>\n  <text x=\"90\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text>\n  <text x=\"150\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text>\n  <text x=\"210\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text>\n  <text x=\"270\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text>\n  <text x=\"330\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text>\n  <text x=\"390\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">6</text>\n  <text x=\"450\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">7</text>\n  <text x=\"510\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">8</text>\n  <text x=\"570\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">9</text>\n  <text x=\"630\" y=\"150\" text-anchor=\"middle\" class=\"t-sm t-muted\">10</text>\n  <rect x=\"90\" y=\"170\" width=\"300\" height=\"20\" class=\"f-ok-soft s-ok\"/>\n  <text x=\"240\" y=\"184\" text-anchor=\"middle\" class=\"t-sm t-ok\">[1,6] merged</text>\n  <rect x=\"510\" y=\"170\" width=\"120\" height=\"20\" class=\"f-panel s-line\"/>\n  <text x=\"570\" y=\"184\" text-anchor=\"middle\" class=\"t-sm\">[8,10]</text>\n  <text x=\"20\" y=\"220\" class=\"t-sm t-muted\">3 &gt; 4? no, overlap: extend end to 6.  Then 8 &gt; 6? yes: push a new interval.</text>\n</svg>"
+    },
+    "m14-sort-by-end": {
+      "caption": "The counterexample that kills sort-by-start: `[0,10]` picked first blocks both small intervals (kept 1). Sorting by **end** takes `[1,2]` then `[3,4]` and skips `[0,10]` (kept 2).",
+      "svg": "<svg viewBox=\"0 0 660 240\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Counterexample showing why interval scheduling sorts by end time\">\n  <text x=\"20\" y=\"24\" class=\"t-bold\">why sort by END: intervals [0,10] [1,2] [3,4]</text>\n  <text x=\"20\" y=\"52\" class=\"t-sm t-bad\">sort by start: pick [0,10] first — it hogs the whole line</text>\n  <rect x=\"30\" y=\"62\" width=\"600\" height=\"20\" class=\"f-bad-soft s-bad\"/>\n  <text x=\"330\" y=\"76\" text-anchor=\"middle\" class=\"t-sm t-bad\">[0,10] picked first</text>\n  <rect x=\"90\" y=\"94\" width=\"60\" height=\"20\" class=\"f-panel s-line o-60\"/>\n  <rect x=\"210\" y=\"94\" width=\"60\" height=\"20\" class=\"f-panel s-line o-60\"/>\n  <text x=\"120\" y=\"108\" text-anchor=\"middle\" class=\"t-sm t-muted\">[1,2]</text>\n  <text x=\"240\" y=\"108\" text-anchor=\"middle\" class=\"t-sm t-muted\">[3,4]</text>\n  <text x=\"630\" y=\"108\" text-anchor=\"end\" class=\"t-sm t-bad\">kept: 1</text>\n  <text x=\"20\" y=\"156\" class=\"t-sm t-ok\">sort by end: always take the earliest finisher still compatible</text>\n  <rect x=\"90\" y=\"166\" width=\"60\" height=\"20\" class=\"f-ok-soft s-ok\"/>\n  <rect x=\"210\" y=\"166\" width=\"60\" height=\"20\" class=\"f-ok-soft s-ok\"/>\n  <text x=\"120\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-ok\">[1,2]</text>\n  <text x=\"240\" y=\"180\" text-anchor=\"middle\" class=\"t-sm t-ok\">[3,4]</text>\n  <text x=\"630\" y=\"180\" text-anchor=\"end\" class=\"t-sm t-ok\">kept: 2</text>\n  <rect x=\"30\" y=\"198\" width=\"600\" height=\"20\" class=\"f-panel s-line o-60\"/>\n  <text x=\"330\" y=\"212\" text-anchor=\"middle\" class=\"t-sm t-muted\">[0,10] skipped — it would block both small ones</text>\n</svg>"
+    },
+    "m14-jump-levels": {
+      "caption": "Jump Game II on `[2,3,1,1,4]` seen as BFS levels: level 1 is everything index 0 reaches (`curEnd = 2`), level 2 is everything level 1 reaches (index 4). Two levels = two jumps, no queue needed.",
+      "svg": "<svg viewBox=\"0 0 660 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Jump Game II as BFS levels over the array 2 3 1 1 4\">\n  <text x=\"20\" y=\"24\" class=\"t-bold\">Jump Game II = BFS in levels, nums = [2,3,1,1,4]</text>\n  <rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-accent-soft s-accent\"/>\n  <text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text>\n  <rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n  <text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">3</text>\n  <rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n  <text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n  <rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-panel s-line\"/>\n  <text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n  <rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/>\n  <text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-ok\">4</text>\n  <text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text>\n  <text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text>\n  <text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text>\n  <text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text>\n  <text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text>\n  <line x1=\"20\" y1=\"132\" x2=\"64\" y2=\"132\" class=\"s-accent\" stroke-width=\"3\"/>\n  <text x=\"280\" y=\"137\" class=\"t-sm t-accent\">level 0 — the start, 0 jumps taken</text>\n  <line x1=\"66\" y1=\"162\" x2=\"156\" y2=\"162\" class=\"s-accent2\" stroke-width=\"3\"/>\n  <text x=\"280\" y=\"167\" class=\"t-sm t-accent2\">level 1 — reachable in 1 jump (curEnd = 0+2 = 2)</text>\n  <line x1=\"158\" y1=\"192\" x2=\"248\" y2=\"192\" class=\"s-ok\" stroke-width=\"3\"/>\n  <text x=\"280\" y=\"197\" class=\"t-sm t-ok\">level 2 — reachable in 2 jumps (from i=1: 1+3 = 4). Done.</text>\n</svg>"
+    },
+    "m14-sweep-line": {
+      "caption": "Meeting Rooms II as a sweep line: each meeting contributes `+1` at its start and `−1` at its end; the running count below the axis peaks at **2**, so 2 rooms suffice.",
+      "svg": "<svg viewBox=\"0 0 660 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Sweep line over meeting intervals with a running room counter\">\n  <text x=\"20\" y=\"24\" class=\"t-bold\">sweep line: +1 at each start, -1 at each end, track the peak</text>\n  <rect x=\"30\" y=\"44\" width=\"600\" height=\"18\" class=\"f-panel s-line\"/>\n  <text x=\"330\" y=\"57\" text-anchor=\"middle\" class=\"t-sm\">[0,30]</text>\n  <rect x=\"130\" y=\"72\" width=\"100\" height=\"18\" class=\"f-accent-soft s-accent\"/>\n  <text x=\"180\" y=\"85\" text-anchor=\"middle\" class=\"t-sm t-accent\">[5,10]</text>\n  <rect x=\"330\" y=\"72\" width=\"100\" height=\"18\" class=\"f-accent-soft s-accent\"/>\n  <text x=\"380\" y=\"85\" text-anchor=\"middle\" class=\"t-sm t-accent\">[15,20]</text>\n  <text x=\"30\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-ok\">+1</text>\n  <text x=\"130\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-ok\">+1</text>\n  <text x=\"230\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-bad\">-1</text>\n  <text x=\"330\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-ok\">+1</text>\n  <text x=\"430\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-bad\">-1</text>\n  <text x=\"630\" y=\"118\" text-anchor=\"middle\" class=\"t-sm t-bad\">-1</text>\n  <line x1=\"30\" y1=\"130\" x2=\"640\" y2=\"130\" class=\"s-muted\"/>\n  <line x1=\"30\" y1=\"126\" x2=\"30\" y2=\"134\" class=\"s-line\"/>\n  <line x1=\"130\" y1=\"126\" x2=\"130\" y2=\"134\" class=\"s-line\"/>\n  <line x1=\"230\" y1=\"126\" x2=\"230\" y2=\"134\" class=\"s-line\"/>\n  <line x1=\"330\" y1=\"126\" x2=\"330\" y2=\"134\" class=\"s-line\"/>\n  <line x1=\"430\" y1=\"126\" x2=\"430\" y2=\"134\" class=\"s-line\"/>\n  <line x1=\"630\" y1=\"126\" x2=\"630\" y2=\"134\" class=\"s-line\"/>\n  <text x=\"30\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text>\n  <text x=\"130\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">5</text>\n  <text x=\"230\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">10</text>\n  <text x=\"330\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">15</text>\n  <text x=\"430\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">20</text>\n  <text x=\"630\" y=\"152\" text-anchor=\"middle\" class=\"t-sm t-muted\">30</text>\n  <text x=\"30\" y=\"180\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n  <text x=\"130\" y=\"180\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text>\n  <text x=\"230\" y=\"180\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n  <text x=\"330\" y=\"180\" text-anchor=\"middle\" class=\"t-mono t-accent\">2</text>\n  <text x=\"430\" y=\"180\" text-anchor=\"middle\" class=\"t-mono\">1</text>\n  <text x=\"630\" y=\"180\" text-anchor=\"middle\" class=\"t-mono\">0</text>\n  <text x=\"20\" y=\"208\" class=\"t-sm t-accent\">running count peaks at 2, so 2 rooms are enough</text>\n</svg>"
+    },
+    "m14-gas-tank": {
+      "caption": "Gas Station with `diff = [-2,-2,-2,+3,+3]`: every negative tank resets the candidate start to the next station; from `start = 3` the tank stays non-negative, and `total = 0` confirms the loop is feasible.",
+      "svg": "<svg viewBox=\"0 0 660 240\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Gas station running tank with resets and the chosen start\">\n  <text x=\"20\" y=\"24\" class=\"t-bold\">gas station: diff = gas - cost, reset start when tank drops below 0</text>\n  <rect x=\"20\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/>\n  <text x=\"42\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">-2</text>\n  <rect x=\"66\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/>\n  <text x=\"88\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">-2</text>\n  <rect x=\"112\" y=\"44\" width=\"44\" height=\"44\" class=\"f-bad-soft s-bad\"/>\n  <text x=\"134\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-bad\">-2</text>\n  <rect x=\"158\" y=\"44\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/>\n  <text x=\"180\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-ok\">+3</text>\n  <rect x=\"204\" y=\"44\" width=\"44\" height=\"44\" class=\"f-ok-soft s-ok\"/>\n  <text x=\"226\" y=\"72\" text-anchor=\"middle\" class=\"t-mono t-ok\">+3</text>\n  <text x=\"42\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">0</text>\n  <text x=\"88\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">1</text>\n  <text x=\"134\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">2</text>\n  <text x=\"180\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">3</text>\n  <text x=\"226\" y=\"106\" text-anchor=\"middle\" class=\"t-sm t-muted\">4</text>\n  <text x=\"42\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-bad\">reset</text>\n  <text x=\"88\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-bad\">reset</text>\n  <text x=\"134\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-bad\">reset</text>\n  <text x=\"180\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-ok\">3</text>\n  <text x=\"226\" y=\"140\" text-anchor=\"middle\" class=\"t-sm t-ok\">6</text>\n  <text x=\"290\" y=\"140\" class=\"t-sm t-muted\">tank after each station (reset to 0 when negative)</text>\n  <line x1=\"180\" y1=\"200\" x2=\"180\" y2=\"160\" class=\"s-accent\" stroke-width=\"2\" marker-end=\"url(#dg-arrow-accent)\"/>\n  <text x=\"180\" y=\"226\" text-anchor=\"middle\" class=\"t-sm t-accent\">start = 3 (one past the last failure); total = 0, so it is feasible</text>\n</svg>"
+    }
+  }
+}
