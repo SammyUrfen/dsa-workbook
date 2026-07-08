@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
@@ -436,10 +436,32 @@ function SvgDefs() {
 /* ------------------------------------------------------------------ */
 export default function App() {
   const [theme, setTheme] = useTheme()
-  const [active, setActive] = useState(TOPICS[0].tag)
-  const [tab, setTab] = useState('learn')
+  const [active, setActive] = usePersist('active-module', TOPICS[0].tag)
+  const [tab, setTab] = usePersist('active-tab', 'learn')
   const [navOpen, setNavOpen] = useState(false)
   const [, forceTick] = useState(0)
+  const mainRef = useRef(null)
+
+  // Save and restore window scroll position per module+tab
+  useEffect(() => {
+    const key = `scroll:${active}:${tab}`
+    const restore = () => {
+      const saved = localStorage.getItem(key)
+      window.scrollTo(0, saved ? parseInt(saved) : 0)
+    }
+    // Wait for DOM to settle before restoring
+    requestAnimationFrame(() => setTimeout(restore, 0))
+  }, [active, tab])
+
+  useEffect(() => {
+    const key = `scroll:${active}:${tab}`
+    const onScroll = () => {
+      localStorage.setItem(key, String(window.scrollY))
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [active, tab])
+
   const topic = useMemo(() => TOPICS.find((t) => t.tag === active), [active])
 
   // overall progress = 🎯 problems solved across every module
@@ -545,7 +567,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" ref={mainRef}>
         <header className="topbar">
           <button className="hamburger" onClick={() => setNavOpen((o) => !o)} aria-label="Menu">
             ☰
