@@ -1,0 +1,52 @@
+<svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DSA Workbook">
+  <!-- Peak outline (mountain shape) -->
+  <path
+    d="M 50 15 L 75 75 L 25 75 Z"
+    fill="none"
+    stroke="#e07b1a"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.35"
+  />
+
+  <!-- Node path (ascending left side) -->
+  <circle cx="35" cy="60" r="3.5" fill="#e07b1a" />
+  <circle cx="42" cy="48" r="3.5" fill="#e07b1a" />
+  <circle cx="48" cy="36" r="3.5" fill="#e07b1a" />
+  <circle cx="50" cy="20" r="4" fill="#bf5d12" />
+
+  <!-- Connecting lines -->
+  <line
+    x1="35"
+    y1="60"
+    x2="42"
+    y2="48"
+    stroke="#e07b1a"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    opacity="0.6"
+  />
+  <line
+    x1="42"
+    y1="48"
+    x2="48"
+    y2="36"
+    stroke="#e07b1a"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    opacity="0.6"
+  />
+  <line
+    x1="48"
+    y1="36"
+    x2="50"
+    y2="20"
+    stroke="#bf5d12"
+    stroke-width="1.8"
+    stroke-linecap="round"
+  />
+
+  <!-- Accent dot at peak -->
+  <circle cx="50" cy="20" r="2.2" fill="#fdeccc" />
+</svg>
